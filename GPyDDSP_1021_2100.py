@@ -8,8 +8,12 @@ import GPy
 from scipy import interpolate
 from librosa import hz_to_note, note_to_hz, stft
 import soundfile as sf
-
+from pprint import pp
+from threadpoolctl import threadpool_info
+# print("numpy:",np.show_config())
+# pp(threadpool_info())
 import ddsp
+import glob
 
 # np.random.seed(0)  # Don't use for ABCI parallel generation
 rng = np.random.default_rng()
@@ -71,9 +75,13 @@ def labelize(value, boundaries):
 
 savedir = args.savedir
 if os.path.isdir(savedir):
-    raise ValueError(f"Directory '{savedir}' already exists!")
-os.makedirs(f"{savedir}" + "wav/")
-os.makedirs(f"{savedir}" + "label/")
+    print(f"Directory '{savedir}' already exists!")
+    gen_counter = len(glob.glob(os.path.join(savedir, 'wav/*.wav')))
+    print(f'{args.workid} created {gen_counter} files already!')
+else:
+    gen_counter = 0
+os.makedirs(f"{savedir}" + "wav/", exist_ok=True)
+os.makedirs(f"{savedir}" + "label/", exist_ok=True)
 
 
 """(0) Fixed paramater settings
@@ -97,7 +105,6 @@ small_variance = 1e-2
 
 max_n_to_mix = 4
 n_iter = args.n_iter
-gen_counter = 0
 
 error_count = 0
 while gen_counter < n_iter:
@@ -512,7 +519,7 @@ while gen_counter < n_iter:
             """            
 
             global_harmonic_envelope_center = None
-            global_noise_distribution_mode = np.argmax(np.mean(noise_distribution_to_interp, axis=1))
+            global_noise_distribution_mode = np.argmax(np.mean(noise_distribution_to_interp, axis=1)) # noise_distribution_to_interp: (freq', time=(noise_anchors))
 
             kernels_list = [
                 ["RBF", GPy.kern.RBF],  # variance, lengthscale
