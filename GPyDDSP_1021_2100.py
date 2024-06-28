@@ -72,6 +72,10 @@ def labelize(value, boundaries):
     
     return multi_label
 
+def labelize_kernel(k_name):
+    kernel_dict = {"RBF":0, "Exponential":1, "Cosine":2, "Linear":3, "sde_Brownian":4, "Poly":5, "StdPeriodic":7, "PeriodicExponential":8}
+    return kernel_dict[k_name]
+
 
 savedir = args.savedir
 if os.path.isdir(savedir):
@@ -82,6 +86,8 @@ else:
     gen_counter = 0
 os.makedirs(f"{savedir}" + "wav/", exist_ok=True)
 os.makedirs(f"{savedir}" + "label/", exist_ok=True)
+os.makedirs(f"{savedir}" + "targets/", exist_ok=True)
+os.makedirs(f"{savedir}" + "volumes/", exist_ok=True)
 
 
 """(0) Fixed paramater settings
@@ -111,6 +117,8 @@ while gen_counter < n_iter:
     n_to_mix = rng.integers(1, max_n_to_mix + 1)
     summed_wav = np.zeros(n_samples)
     i_mix = 0
+    raw_target_list = []
+    volume_list = []
     while i_mix < n_to_mix:
         try:
             """(1) Hyper-paramater settings
@@ -563,7 +571,9 @@ while gen_counter < n_iter:
             boundaries_f0_quantize = [0.5]
             boundaries_ir_diminin = [-100, -50]
 
-
+            raw_targets = np.array([scale_exp_voiced, global_harmonic_volume_initial_bias, global_noise_volume_initial_bias, global_f0_mel_variance, global_f0_mel_initial_bias, global_harmonic_envelope_variance, global_harmonic_envelope_lengthscale, global_harmonic_envelope_initial_bias, 
+                           labelize_kernel(harmonic_envelope_kernel_name), global_noise_distribution_initial_bias, global_noise_distribution_mode, labelize_kernel(kernel_freq_name), hn_cor, local_volume_hn_variance, labelize_kernel(local_volume_hn_K_name), 
+                           local_f0_mel_variance, local_f0_mel_lengthscale, labelize_kernel(local_f0_mel_kernel_name), n_harmonics, f0_quantize, ir_diminin])
             # label information
             labels = {
                 # 有音区間継続長
@@ -685,14 +695,13 @@ while gen_counter < n_iter:
             # for 16ms label ([1025, 626] -> 625]), 10sec / 625 = 16ms.
             powerspec = np.abs(stft(audio_wet[0], n_fft=2048, hop_length=256)) ** 2
             power = np.interp(np.linspace(0, 100, 625), np.linspace(0, 100, 626), np.sum(powerspec, axis=0))
-
             power_db = 10 * np.log10(power / np.mean(power))
+            volume_list.append(power_db)
             volume_on_frames = np.where(power_db > -10, 1, 0)
-
             label_all = np.concatenate([*labels.values()])
+            raw_targets = raw_targets[:, None] * volume_on_frames
             aligned_label = label_all[:,None] * volume_on_frames
-
-
+            raw_target_list.append(raw_targets)
             # SN比
             sn_db_power = rng.uniform(-5, 5)
             # print(f"sn_db_power: {sn_db_power}")
@@ -713,7 +722,7 @@ while gen_counter < n_iter:
     # summed_wav /= n_to_mix
     try:
         assert summed_wav.max() < 1
-    except:
+    except Exception:
         print(f"Work id {args.workid}: Skipped (summed_wav.max() >= 1).")
         continue
 
@@ -722,6 +731,8 @@ while gen_counter < n_iter:
 
     sf.write(f'{savedir}' + f'wav/{gen_counter}_{n_to_mix}mix.wav', summed_wav, sample_rate, 'PCM_24')
     np.save(f'{savedir}' + f'label/{gen_counter}_{n_to_mix}mix.npy', summed_label)
+    np.save(f'{savedir}' + f'targets/{gen_counter}_{n_to_mix}mix.npy', np.array(raw_target_list))
+    np.save(f'{savedir}' + f'volumes/{gen_counter}_{n_to_mix}mix.npy', np.array(volume_list))
 
     gen_counter += 1
     if (100 * gen_counter) % n_iter == 0:
