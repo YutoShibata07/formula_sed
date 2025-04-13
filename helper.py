@@ -7,6 +7,7 @@ from librosa import hz_to_note, note_to_hz, stft
 from utils import mel_to_hz
 from constants import SILENCE
 from constants import boundaries_scale_exp_voiced, boundaries_global_harmonic_volume_initial_bias, boundaries_global_noise_volume_initial_bias, boundaries_global_f0_mel_variance, boundaries_global_f0_mel_initial_bias, boundaries_global_harmonic_envelope_variance, boundaries_global_harmonic_envelope_lengthscale, boundaries_global_harmonic_envelope_initial_bias, boundaries_harmonic_envelope_kernel_name, boundaries_global_noise_distribution_initial_bias, boundaries_global_noise_distribution_mode, boundaries_kernel_freq_name, boundaries_hn_cor, boundaries_local_volume_hn_variance, boundaries_local_volume_hn_K_name,boundaries_local_f0_mel_variance,boundaries_local_f0_mel_lengthscale,boundaries_local_f0_mel_kernel_name, boundaries_n_harmonics, boundaries_f0_quantize,boundaries_ir_diminin
+from synth_params import sample_global_params, sample_local_params, GlobalParams, LocalParams
 
 n_kernel_kinds = len(kernels_list)
 
@@ -133,6 +134,105 @@ def sample_voiced_silence_durations(
             break
     return voiced_durations, silent_durations
 
+def generate_continuous_targets(global_params: GlobalParams, local_params: LocalParams, harmonic_envelope_kernel_name: str, global_noise_distribution_mode:float, kernel_noise_freq_name:str, local_volume_hn_K_name:str, local_f0_mel_kernel_name:str)  -> np.ndarray:
+    """
+    Generate continuous targets based on the provided global and local parameters.
+
+    Args:
+        global_params: An instance of GlobalParams containing global parameters.
+        local_params: An instance of LocalParams containing local parameters.
+
+    Returns:
+        A numpy array representing the generated continuous targets.
+    """
+    targets = np.array([global_params.scale_exp_voiced, global_params.harmonic_volume_initial_bias, global_params.noise_volume_initial_bias, global_params.f0_mel_variance, global_params.f0_mel_initial_bias, global_params.harmonic_envelope_variance, global_params.harmonic_envelope_lengthscale, global_params.harmonic_envelope_initial_bias, 
+                        labelize_kernel(harmonic_envelope_kernel_name), global_params.noise_distribution_initial_bias, global_noise_distribution_mode, labelize_kernel(kernel_noise_freq_name), local_params.hn_cor, local_params.volume_hn_variance, labelize_kernel(local_volume_hn_K_name), 
+                        local_params.f0_mel_variance, local_params.f0_mel_lengthscale, labelize_kernel(local_f0_mel_kernel_name), global_params.n_harmonics, global_params.f0_quantize, global_params.ir_diminin])
+
+    return targets
+
+def generate_discrete_targets(global_params: GlobalParams, local_params: LocalParams, harmonic_envelope_kernel_name: str, global_noise_distribution_mode:float, kernel_freq_name:str, local_volume_hn_K_name:str, local_f0_mel_kernel_name:str) -> dict:
+    labels = {
+            # Duration of voiced segment
+            "label_scale_exp_voiced":
+                labelize(global_params.scale_exp_voiced, boundaries_scale_exp_voiced),
+            
+            # Sharpness of global harmonic volume
+            "label_global_harmonic_volume_initial_bias":
+                labelize(global_params.harmonic_volume_initial_bias, boundaries_global_harmonic_volume_initial_bias), 
+            
+            # Sharpness of global noise volume
+            "label_global_noise_volume_initial_bias":
+                labelize(global_params.noise_volume_initial_bias, boundaries_global_noise_volume_initial_bias),
+            
+            # Global F0 variation range
+            "label_global_f0_mel_variance":
+                labelize(global_params.f0_mel_variance, boundaries_global_f0_mel_variance),
+                    
+            # # Harmonic pitch sharpness
+            "label_global_f0_mel_initial_bias":
+                labelize(global_params.f0_mel_initial_bias, boundaries_global_f0_mel_initial_bias),
+            
+            # Harmonic envelope variation range
+            "label_global_harmonic_envelope_variance":
+                labelize(global_params.harmonic_envelope_variance, boundaries_global_harmonic_envelope_variance),
+            
+            # Harmonic envelope lengthscale
+            "label_global_harmonic_envelope_lengthscale":
+                labelize(global_params.harmonic_envelope_lengthscale, boundaries_global_harmonic_envelope_lengthscale),
+            
+            # Harmonic envelope sharpness
+            "label_global_harmonic_envelope_initial_bias":
+                labelize(global_params.harmonic_envelope_initial_bias, boundaries_global_harmonic_envelope_initial_bias),
+
+                    
+            # Harmonic envelopne kernel
+            "label_harmonic_envelope_kernel_name":
+                labelize(harmonic_envelope_kernel_name, boundaries_harmonic_envelope_kernel_name),
+                    
+            # Sharpness of the noise distribution along the frequency axis
+            "label_global_noise_distribution_initial_bias":
+                labelize(global_params.noise_distribution_initial_bias, boundaries_global_noise_distribution_initial_bias),
+                    
+            # Spectral centroid of the noise distribution
+            "label_global_noise_distribution_mode":
+                labelize(global_noise_distribution_mode, boundaries_global_noise_distribution_mode),
+                    
+            # Kernel type of the inharmonic envelope
+            "label_kernel_freq_name":
+                labelize(kernel_freq_name, boundaries_kernel_freq_name),
+                    
+            # Local volume correlation between harmonic and inharmonic components
+            "label_hn_cor":
+                labelize(local_params.hn_cor, boundaries_hn_cor),
+                    
+            # Local volume variance
+            "label_local_volume_hn_variance":
+                labelize(local_params.volume_hn_variance, boundaries_local_volume_hn_variance),
+                    
+            # Kernel type of the local volume   
+            "label_local_volume_hn_K_name":
+                labelize(local_volume_hn_K_name, boundaries_local_volume_hn_K_name),
+                    
+            # Local F0 variance
+            "label_local_f0_mel_variance":
+                labelize(local_params.f0_mel_variance, boundaries_local_f0_mel_variance),
+                    
+            "label_local_f0_mel_lengthscale":
+                labelize(local_params.f0_mel_lengthscale, boundaries_local_f0_mel_lengthscale),
+                    
+            "label_local_f0_mel_kernel_name":
+                labelize(local_f0_mel_kernel_name, boundaries_local_f0_mel_kernel_name),
+                            
+            "label_n_harmonics":
+                labelize(global_params.n_harmonics, boundaries_n_harmonics),
+            "label_f0_quantize":
+                labelize(global_params.f0_quantize, boundaries_f0_quantize),
+            "label_ir_diminin":
+                labelize(global_params.ir_diminin, boundaries_ir_diminin)
+        }
+    return labels
+
 def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:int, small_variance:float, duration:float, frames_per_sec:int, n_frames:int,  default_kernel: Type[GPy.kern.Kern], n_frequencies:int, noise_anchors:int, noise_vagueness:int, sample_rate:int, workid:int):
     n_to_mix = rng.integers(1, max_n_to_mix + 1) #the number of source audio to mix
     summed_wav = np.zeros(n_samples)
@@ -151,49 +251,12 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
                 repeat_times = rng.poisson(lam_poisson) # 50
                 if repeat_times > 0:
                     break
-            scale_exp_silent = 10 ** rng.uniform(-1, 0.5) # 1e-1
-            scale_exp_voiced = 10 ** rng.uniform(-1, 1) # 1e1
-            scale_normal_silent = small_variance
-            scale_normal_voiced = small_variance
 
             # for globals
-            global_volume_variance = small_variance
-            global_volume_lengthscale = 1  # 1 (fixed)
-            global_volume_cov = np.array([[1, 0.99], [0.99, 1]])  # (fixed)
-            global_harmonic_volume_initial_bias = rng.uniform(-4, 5) # -4~5 (boundary -1 / 2)
-            if global_harmonic_volume_initial_bias < -1:
-                global_noise_volume_initial_bias = rng.uniform(5, 45)  # -15~45 (boundary 5 / 25)
-            else:
-                global_noise_volume_initial_bias = rng.uniform(-15, 45)  # -15~45
-            global_f0_mel_variance = 30 ** rng.uniform(0, 2)  # 1 ~ 900
-            global_f0_mel_lengthscale = 1e-2  # (fixed)
-            global_f0_mel_initial_bias = 50 ** rng.uniform(1, 2) # 430, 50~2500
-            global_harmonic_envelope_variance = 10 ** rng.uniform(-1, 1)  # 0.1, to_consider_as_label
-            global_harmonic_envelope_lengthscale = 10 ** rng.uniform(1, 3) # 5e2, to_consider_as_label
-            global_harmonic_envelope_initial_bias = 10 ** rng.uniform(-1, 1)  # 0.2, to_consider_as_label
-            global_noise_distribution_freq_variance = 1  # 1 (fixed)
-            global_noise_distribution_freq_lengthscale = 1e-1  # 1e-1 (fixed)
-            global_noise_distribution_time_variance = 1e2  # 1e2 (fixed)
-            global_noise_distribution_time_lengthscale = 2  # 2 (fixed)
-            global_noise_distribution_initial_bias = 10 ** rng.uniform(-1, 1)  # to_consider_as_label
+            global_params = sample_global_params(rng, small_variance=small_variance)
 
             # for locals
-            hn_cor = rng.uniform(0.8, 1.0) * rng.choice([-1, 1])
-            local_volume_hn_correlation = np.array([[1, hn_cor], [hn_cor, 1]]) # np.array([[1, -0.99], [-0.99, 1]])
-            local_volume_hn_variance = 10 ** rng.uniform(0, 1)
-            local_volume_hn_lengthscale = 1  # to_consider_which_to_fix
-            local_volume_section_correlation = np.array([[1, 0.99],[0.99, 1]])  # (fixed)
-            local_volume_section_variance = small_variance
-            local_volume_section_lengthscale = 1  # to_consider_which_to_fix
-            local_f0_mel_variance = 10 ** rng.uniform(0, 4)  # 1e3
-            local_f0_mel_lengthscale = 10 ** rng.uniform(-1, 1) # 1e-1
-            local_section_f0_mel_variance = 10 ** rng.uniform(-1, 0) # 0.1
-
-            # others
-            n_harmonics = rng.integers(5, 51)  # 50, to_consider_as_label
-            f0_quantize = rng.choice([False, True])
-            ir_diminin = rng.uniform(-150.0, -5.0) 
-
+            local_params = sample_local_params(rng=rng, small_variance=small_variance)
 
             """(2) Sound generation
             """
@@ -202,10 +265,10 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             voiced_durations, silent_durations = sample_voiced_silence_durations(
                 rng=rng,
                 repeat_times=repeat_times,         
-                scale_exp_silent=scale_exp_silent,   
-                scale_exp_voiced=scale_exp_voiced,  
-                scale_normal_silent=scale_normal_silent,
-                scale_normal_voiced=scale_normal_voiced,
+                scale_exp_silent=global_params.scale_exp_silent,   
+                scale_exp_voiced=global_params.scale_exp_voiced,  
+                scale_normal_silent=global_params.scale_normal_silent,
+                scale_normal_voiced=global_params.scale_normal_voiced,
                 duration=duration,           
                 frames_per_sec=frames_per_sec,     
                 n_frames=n_frames           
@@ -217,8 +280,8 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             ### For voiced sections, set global characteristics
 
             # Global volume (harmonic & noise)
-            global_volume_kernel = default_kernel(1, variance=global_volume_variance, lengthscale=global_volume_lengthscale)
-            global_volume_W = np.linalg.cholesky(global_volume_cov)
+            global_volume_kernel = default_kernel(1, variance=global_params.volume_variance, lengthscale=global_params.volume_lengthscale)
+            global_volume_W = np.linalg.cholesky(global_params.volume_cov)
             global_volume_icm = GPy.util.multioutput.ICM(
                 input_dim=1, 
                 num_outputs=2, 
@@ -231,26 +294,26 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             x = np.arange(repeat_times)
             x_ = np.stack((np.tile(x, 2), np.repeat(np.arange(2), repeat_times)), axis=-1)
             y_volume_means = np.random.multivariate_normal(np.zeros(repeat_times * 2), global_volume_icm.K(x_))
-            harmonic_volume_means = y_volume_means[:repeat_times] + global_harmonic_volume_initial_bias
-            noise_volume_means = y_volume_means[repeat_times:] + global_noise_volume_initial_bias
+            harmonic_volume_means = y_volume_means[:repeat_times] + global_params.harmonic_volume_initial_bias
+            noise_volume_means = y_volume_means[repeat_times:] + global_params.noise_volume_initial_bias
 
             # Global harmonic f0
-            global_f0_mel_kernel = default_kernel(1, variance=global_f0_mel_variance, lengthscale=global_f0_mel_lengthscale)
+            global_f0_mel_kernel = default_kernel(1, variance=global_params.f0_mel_variance, lengthscale=global_params.f0_mel_lengthscale)
             harmonic_f0_mel_means = np.random.multivariate_normal(np.zeros(repeat_times), global_f0_mel_kernel.K(x[:,None]) + 1e-8*np.identity(repeat_times))
             harmonic_f0_mel_means -=  harmonic_f0_mel_means.min()
-            harmonic_f0_mel_means += global_f0_mel_initial_bias
+            harmonic_f0_mel_means += global_params.f0_mel_initial_bias
 
             # Global envelope (harmonic <file-invariant>)
             harmonic_envelope_kernel_period = rng.uniform(0, 2*np.pi)
             harmonic_envelope_kernel_name, harmonic_envelope_kernel = kernel_sampler(
                 rng=rng,
-                variance=global_harmonic_envelope_variance, 
-                lengthscale=global_harmonic_envelope_lengthscale, 
+                variance=global_params.harmonic_envelope_variance, 
+                lengthscale=global_params.harmonic_envelope_lengthscale, 
                 period=harmonic_envelope_kernel_period)
             x = np.arange(n_frequencies)
             harmonic_envelope_mean = np.random.multivariate_normal(np.zeros(n_frequencies), harmonic_envelope_kernel.K(x[:,None]) + 1e-8*np.identity(n_frequencies))
             harmonic_envelope_mean -= harmonic_envelope_mean.min()
-            harmonic_envelope_mean += global_harmonic_envelope_initial_bias
+            harmonic_envelope_mean += global_params.harmonic_envelope_initial_bias
             harmonic_envelope_mean[0] = 0
 
             # Global envelope (noise <section-invariant, to interpolate>)
@@ -260,10 +323,10 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             kernel_freq_period = rng.uniform(0, 2*np.pi)
             kernel_freq_name, kernel_freq = kernel_sampler(
                 rng=rng,
-                variance=global_noise_distribution_freq_variance, 
-                lengthscale=global_noise_distribution_freq_lengthscale,
+                variance=global_params.noise_distribution_freq_variance, 
+                lengthscale=global_params.noise_distribution_freq_lengthscale,
                 period=kernel_freq_period)
-            kernel_time = default_kernel(1, variance=global_noise_distribution_time_variance, lengthscale=global_noise_distribution_time_lengthscale)
+            kernel_time = default_kernel(1, variance=global_params.noise_distribution_time_variance, lengthscale=global_params.noise_distribution_time_lengthscale)
             W_noise_time = np.linalg.cholesky(kernel_time.K(np.linspace(0, 1, noise_anchors)[:,None]) + np.eye(noise_anchors) * 1e-8)
             # multi-output gaussian prosess
             icm_noise = GPy.util.multioutput.ICM(1, noise_anchors, kernel_freq, W_rank=noise_anchors, W=W_noise_time, kappa=1e-8*np.ones(noise_anchors))
@@ -271,7 +334,7 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             # noise distribution (frequency * the number of noised section (noise_anchors))
             noise_distribution_to_interp = np.random.multivariate_normal(np.zeros(n_frequencies // noise_vagueness * noise_anchors), noise_cor)
             noise_distribution_to_interp = noise_distribution_to_interp.reshape(noise_anchors, -1).T
-            noise_distribution_to_interp += -noise_distribution_to_interp.min(axis=0) + global_noise_distribution_initial_bias
+            noise_distribution_to_interp += -noise_distribution_to_interp.min(axis=0) + global_params.noise_distribution_initial_bias
             noise_distribution_to_interp = noise_distribution_to_interp / (noise_distribution_to_interp.sum(axis=0) + 1e-16)
 
             ### local harmonic f0
@@ -283,8 +346,8 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             local_f0_mel_kernel_period = rng.uniform(0, 2*np.pi)
             local_f0_mel_kernel_name, local_f0_mel_kernel = kernel_sampler(
                 rng=rng,
-                variance=local_f0_mel_variance, 
-                lengthscale=local_f0_mel_lengthscale, 
+                variance=local_params.f0_mel_variance, 
+                lengthscale=local_params.f0_mel_lengthscale, 
                 period=local_f0_mel_kernel_period)
             local_f0_mel = np.random.multivariate_normal(np.zeros(500), local_f0_mel_kernel.K(x[:,None]) + 1e-8*np.identity(500))
             local_f0_mels.append(local_f0_mel)
@@ -292,8 +355,8 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             # generate following samples (not resampled)
             local_section_f0_mel_kernel = default_kernel(
                 1, 
-                variance=local_section_f0_mel_variance, 
-                lengthscale=local_section_f0_mel_variance
+                variance=local_params.f0_mel_variance, 
+                lengthscale=local_params.f0_mel_variance
             )
             # Introduce frequency-wise correlations across local sections.
             for i in range(n_sections-1):
@@ -306,7 +369,7 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
                 xp = np.linspace(0, 1, 500)
                 local_f0_hzs[e] = mel_to_hz(np.interp(x, xp, local_f0_mels[e], left=0, right=0) + harmonic_f0_mel_means[e])
                 local_f0_hzs[e] = np.where(local_f0_hzs[e] <= 0, 0, local_f0_hzs[e])
-                if f0_quantize:
+                if global_params.f0_quantize:
                     local_f0_hzs[e] = note_to_hz(hz_to_note(local_f0_hzs[e]))
 
             # final output
@@ -320,12 +383,12 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             x_ = np.stack((np.tile(x, 2), np.repeat(np.arange(2), 500)), axis=-1)
 
 
-            local_volume_hn_correlation_W = np.linalg.cholesky(local_volume_hn_correlation)
+            local_volume_hn_correlation_W = np.linalg.cholesky(local_params.volume_hn_correlation)
             local_volume_hn_K_period = rng.uniform(0, 2*np.pi)
             local_volume_hn_K_name, local_volume_hn_K = kernel_sampler(
                 rng=rng,
-                variance=local_volume_hn_variance, 
-                lengthscale=local_volume_hn_lengthscale, 
+                variance=local_params.volume_hn_variance, 
+                lengthscale=local_params.volume_hn_lengthscale, 
                 period=local_volume_hn_K_period)
             local_volume_hn_icm = GPy.util.multioutput.ICM(
                 input_dim=1, num_outputs=2, W_rank=2, kernel=local_volume_hn_K, W=local_volume_hn_correlation_W, kappa=1e-8*np.ones(2))
@@ -336,9 +399,9 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             local_noise_volumes.append(hn_volumes[500:])
 
             # generate following samples (not resampled)
-            local_volume_section_correlation_W = np.linalg.cholesky(local_volume_section_correlation)
+            local_volume_section_correlation_W = np.linalg.cholesky(local_params.volume_section_correlation)
             local_volume_section_K = default_kernel(
-                1, variance=local_volume_section_variance, lengthscale=local_volume_section_lengthscale)
+                1, variance=local_params.volume_section_variance, lengthscale=local_params.volume_section_lengthscale)
             local_volume_section_icm = GPy.util.multioutput.ICM(
                 input_dim=1, num_outputs=2, W_rank=2, kernel=local_volume_section_K, W=local_volume_section_correlation_W, kappa=1e-8*np.ones(2))
             for i in range(n_sections-1):
@@ -366,8 +429,8 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             ### Local harmonic distributions
             local_harmonic_distributions = []
             for e, _ in enumerate(voiced_durations):
-                harmonic_distribution = np.zeros([voiced_durations[e], n_harmonics])
-                for h in range(n_harmonics):
+                harmonic_distribution = np.zeros([voiced_durations[e], global_params.n_harmonics])
+                for h in range(global_params.n_harmonics):
                     harmonic_distribution[:,h] = np.interp(
                         harmonic_f0s[e] * (h+1), 
                         np.linspace(0, sample_rate / 2, n_frequencies),
@@ -410,12 +473,12 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
                 
                 
             ### generate connected harmonic distributions and noise distributions
-            connected_harmonic_distributions = np.zeros((n_frames, n_harmonics))
+            connected_harmonic_distributions = np.zeros((n_frames, global_params.n_harmonics))
             connected_noise_distributions = np.zeros((n_frequencies // noise_vagueness, n_frames))
             cur_frame = 0
             for i in range(repeat_times + 1):
                 if i < len(silent_durations):
-                    connected_harmonic_distributions[cur_frame : cur_frame + silent_durations[i], :] = 1 / n_harmonics
+                    connected_harmonic_distributions[cur_frame : cur_frame + silent_durations[i], :] = 1 / global_params.n_harmonics
                     connected_noise_distributions[:, cur_frame : cur_frame + silent_durations[i]] = noise_vagueness / n_frequencies
                     cur_frame += silent_durations[i]
                 else:
@@ -436,7 +499,7 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
 
             ir = 0.1 * np.random.randn(ir_size)
             ir[:n_fade_in] *= np.linspace(0.5, 1.0, n_fade_in)
-            ir[n_fade_in:] *= np.exp(np.linspace(0.0, ir_diminin, n_fade_out))
+            ir[n_fade_in:] *= np.exp(np.linspace(0.0, global_params.ir_diminin, n_fade_out))
             ir = ir[np.newaxis, :]
 
 
@@ -480,89 +543,9 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
        
             global_noise_distribution_mode = np.argmax(np.mean(noise_distribution_to_interp, axis=1)) # noise_distribution_to_interp: (freq', time=(noise_anchors))
 
-            raw_targets = np.array([scale_exp_voiced, global_harmonic_volume_initial_bias, global_noise_volume_initial_bias, global_f0_mel_variance, global_f0_mel_initial_bias, global_harmonic_envelope_variance, global_harmonic_envelope_lengthscale, global_harmonic_envelope_initial_bias, 
-                        labelize_kernel(harmonic_envelope_kernel_name), global_noise_distribution_initial_bias, global_noise_distribution_mode, labelize_kernel(kernel_freq_name), hn_cor, local_volume_hn_variance, labelize_kernel(local_volume_hn_K_name), 
-                        local_f0_mel_variance, local_f0_mel_lengthscale, labelize_kernel(local_f0_mel_kernel_name), n_harmonics, f0_quantize, ir_diminin])
+            raw_targets = generate_continuous_targets(global_params=global_params, local_params=local_params, harmonic_envelope_kernel_name=harmonic_envelope_kernel_name, global_noise_distribution_mode=global_noise_distribution_mode, kernel_noise_freq_name=kernel_freq_name, local_volume_hn_K_name=local_volume_hn_K_name, local_f0_mel_kernel_name=local_f0_mel_kernel_name)
             # label information
-            labels = {
-                # Duration of voiced segment
-                "label_scale_exp_voiced":
-                    labelize(scale_exp_voiced, boundaries_scale_exp_voiced),
-                
-                # Sharpness of global harmonic volume
-                "label_global_harmonic_volume_initial_bias":
-                    labelize(global_harmonic_volume_initial_bias, boundaries_global_harmonic_volume_initial_bias), 
-                
-                # Sharpness of global noise volume
-                "label_global_noise_volume_initial_bias":
-                    labelize(global_noise_volume_initial_bias, boundaries_global_noise_volume_initial_bias),
-                
-                # Global F0 variation range
-                "label_global_f0_mel_variance":
-                    labelize(global_f0_mel_variance, boundaries_global_f0_mel_variance),
-                        
-                # # Harmonic pitch sharpness
-                "label_global_f0_mel_initial_bias":
-                    labelize(global_f0_mel_initial_bias, boundaries_global_f0_mel_initial_bias),
-                
-                # Harmonic envelope variation range
-                "label_global_harmonic_envelope_variance":
-                    labelize(global_harmonic_envelope_variance, boundaries_global_harmonic_envelope_variance),
-                
-                # Harmonic envelope lengthscale
-                "label_global_harmonic_envelope_lengthscale":
-                    labelize(global_harmonic_envelope_lengthscale, boundaries_global_harmonic_envelope_lengthscale),
-                
-                # Harmonic envelope sharpness
-                "label_global_harmonic_envelope_initial_bias":
-                    labelize(global_harmonic_envelope_initial_bias, boundaries_global_harmonic_envelope_initial_bias),
-
-                        
-                # Harmonic envelopne kernel
-                "label_harmonic_envelope_kernel_name":
-                    labelize(harmonic_envelope_kernel_name, boundaries_harmonic_envelope_kernel_name),
-                        
-                # Sharpness of the noise distribution along the frequency axis
-                "label_global_noise_distribution_initial_bias":
-                    labelize(global_noise_distribution_initial_bias, boundaries_global_noise_distribution_initial_bias),
-                        
-                # Spectral centroid of the noise distribution
-                "label_global_noise_distribution_mode":
-                    labelize(global_noise_distribution_mode, boundaries_global_noise_distribution_mode),
-                        
-                # Kernel type of the inharmonic envelope
-                "label_kernel_freq_name":
-                    labelize(kernel_freq_name, boundaries_kernel_freq_name),
-                        
-                # Local volume correlation between harmonic and inharmonic components
-                "label_hn_cor":
-                    labelize(hn_cor, boundaries_hn_cor),
-                        
-                # Local volume variance
-                "label_local_volume_hn_variance":
-                    labelize(local_volume_hn_variance, boundaries_local_volume_hn_variance),
-                        
-                # Kernel type of the local volume   
-                "label_local_volume_hn_K_name":
-                    labelize(local_volume_hn_K_name, boundaries_local_volume_hn_K_name),
-                        
-                # Local F0 variance
-                "label_local_f0_mel_variance":
-                    labelize(local_f0_mel_variance, boundaries_local_f0_mel_variance),
-                        
-                "label_local_f0_mel_lengthscale":
-                    labelize(local_f0_mel_lengthscale, boundaries_local_f0_mel_lengthscale),
-                        
-                "label_local_f0_mel_kernel_name":
-                    labelize(local_f0_mel_kernel_name, boundaries_local_f0_mel_kernel_name),
-                                
-                "label_n_harmonics":
-                    labelize(n_harmonics, boundaries_n_harmonics),
-                "label_f0_quantize":
-                    labelize(f0_quantize, boundaries_f0_quantize),
-                "label_ir_diminin":
-                    labelize(ir_diminin, boundaries_ir_diminin)
-            }
+            labels = generate_discrete_targets(global_params=global_params, local_params=local_params, harmonic_envelope_kernel_name=harmonic_envelope_kernel_name, global_noise_distribution_mode=global_noise_distribution_mode, kernel_freq_name=kernel_freq_name, local_volume_hn_K_name=local_volume_hn_K_name, local_f0_mel_kernel_name=local_f0_mel_kernel_name)
 
             # when noise is dominant, unlabel harmonics (and vice versa)
             if np.argmax(labels["label_global_harmonic_volume_initial_bias"]) == 0 and np.argmax(labels["label_global_noise_volume_initial_bias"]) == 2:
@@ -610,7 +593,8 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
             
             i_mix += 1
 
-        except Exception:
+        except Exception as e:
+            print(f"Work id {workid}: {e}")
             print(f"Work id {workid}: Skipped (Some error happened).")
     
     summed_label = summed_label.sum(axis=0)
