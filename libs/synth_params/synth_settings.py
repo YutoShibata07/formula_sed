@@ -1,6 +1,6 @@
 # params.py
 from dataclasses import dataclass, field, asdict
-from typing import Type, Optional, Dict, Any
+from typing import Type, Dict, Any
 import GPy
 
 

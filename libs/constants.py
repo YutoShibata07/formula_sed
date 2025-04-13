@@ -1,4 +1,3 @@
-import GPy
 import numpy as np
 from .kernels import kernels_list
 

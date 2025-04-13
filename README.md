@@ -63,7 +63,7 @@ Please check whether NumPy is using `Intel MKL` as its BLAS/LAPACK backend.
 ```bash
 python -c "import numpy as np; np.show_config()"
 ```
-You will see "mkl-sdl" as the output.
+You will see `libraries = ['mkl_rt', 'pthread']` as the output.
 ## Data Generation (single Process)
 ```bash
 python3 ./main.py --workid=0 --savedir=data --n_iter=2 --seed=0 

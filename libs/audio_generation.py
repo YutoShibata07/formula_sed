@@ -1,8 +1,7 @@
 import GPy
-from .constants import kernels_list
 import numpy as np
 import ddsp
-from typing import Type, Tuple, List
+from typing import Type
 from librosa import hz_to_note, note_to_hz, stft
 from .utils import mel_to_hz
 from .constants import SILENCE
