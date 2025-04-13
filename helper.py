@@ -599,5 +599,6 @@ def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:i
     
     summed_label = summed_label.sum(axis=0)
     summed_label = np.where(summed_label > 0, 1, 0).astype(np.int8)
+    assert np.all(np.isin(summed_label, [0, 1])), "summed_label contains values other than 0 and 1."
 
     return summed_wav, summed_label, raw_target_list, volume_list
