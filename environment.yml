@@ -1,0 +1,21 @@
+name: formula-sed
+channels:
+  - defaults
+  - conda-forge
+
+dependencies:
+  - python=3.9
+  - "numpy=1.25.*"
+  - "scipy=1.11.*"
+  - "blas=*=mkl"
+  - mkl
+  - matplotlib
+  - librosa
+  - pysoundfile
+  - threadpoolctl
+  - ruff
+  - requests  
+  - pip
+  - pip:
+    - GPy==1.13.2
+    #   - ddsp==3.6.0

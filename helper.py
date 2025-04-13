@@ -1,49 +1,16 @@
-#! /usr/bin/env python3
-
-import os
-import argparse
-import numpy as np
-import matplotlib.pyplot as plt
 import GPy
-from scipy import interpolate
-from librosa import hz_to_note, note_to_hz, stft
-import soundfile as sf
-from pprint import pp
-from threadpoolctl import threadpool_info
-# print("numpy:",np.show_config())
-# pp(threadpool_info())
+from constants import kernels_list
+import numpy as np
 import ddsp
-import glob
+from typing import Type, Tuple, List
+from librosa import hz_to_note, note_to_hz, stft
+from utils import mel_to_hz
+from constants import SILENCE
+from constants import boundaries_scale_exp_voiced, boundaries_global_harmonic_volume_initial_bias, boundaries_global_noise_volume_initial_bias, boundaries_global_f0_mel_variance, boundaries_global_f0_mel_initial_bias, boundaries_global_harmonic_envelope_variance, boundaries_global_harmonic_envelope_lengthscale, boundaries_global_harmonic_envelope_initial_bias, boundaries_harmonic_envelope_kernel_name, boundaries_global_noise_distribution_initial_bias, boundaries_global_noise_distribution_mode, boundaries_kernel_freq_name, boundaries_hn_cor, boundaries_local_volume_hn_variance, boundaries_local_volume_hn_K_name,boundaries_local_f0_mel_variance,boundaries_local_f0_mel_lengthscale,boundaries_local_f0_mel_kernel_name, boundaries_n_harmonics, boundaries_f0_quantize,boundaries_ir_diminin
 
-# np.random.seed(0)  # Don't use for ABCI parallel generation
-rng = np.random.default_rng()
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--workid', default=0, type=int)
-parser.add_argument('--n_iter', default=0, type=int)
-parser.add_argument('--savedir', default=None, type=str)
-args = parser.parse_args()
-
-kernels_list = [
-    ["RBF", GPy.kern.RBF],  # variance, lengthscale
-    ["Exponential", GPy.kern.Exponential],  # variance, lengthscale
-    ["Cosine", GPy.kern.Cosine],  # variance, lengthscale
-    ["Linear", GPy.kern.Linear],  # variances
-    ["sde_Brownian", GPy.kern.sde_Brownian],  # variance
-    ["Poly", GPy.kern.Poly],  # variance, scale, bias, order
-    ["StdPeriodic", GPy.kern.StdPeriodic],  # variance, period, lengthscale
-    ["PeriodicExponential", GPy.kern.PeriodicExponential],  # variance, lengthscale, period=6.283185307179586, n_freq=10, lower=0.0, upper=12.566370614359172
-]
 n_kernel_kinds = len(kernels_list)
 
-def mel_to_hz(mel):
-    return 700 * (10 ** (mel / 2595.) - 1)
-
-def hz_to_mel(hz):
-    return 2595. * np.log10(1 + hz / 700.)
-
-def kernel_sampler(variance=None, lengthscale=None, period=None):
+def kernel_sampler(rng=None, variance=None, lengthscale=None, period=None):
     kernels = [
         ["RBF", GPy.kern.RBF(1, variance, lengthscale)],  # variance, lengthscale
         ["Exponential", GPy.kern.Exponential(1, variance, lengthscale)],  # variance, lengthscale
@@ -76,45 +43,98 @@ def labelize_kernel(k_name):
     kernel_dict = {"RBF":0, "Exponential":1, "Cosine":2, "Linear":3, "sde_Brownian":4, "Poly":5, "StdPeriodic":7, "PeriodicExponential":8}
     return kernel_dict[k_name]
 
+def sample_voiced_silence_durations(
+    rng: np.random.Generator,
+    repeat_times: int,
+    scale_exp_silent: float,
+    scale_exp_voiced: float,
+    scale_normal_silent: float,
+    scale_normal_voiced: float,
+    duration: float,
+    frames_per_sec: int,
+    n_frames: int
+) -> Tuple[List[int], List[int]]:
+    """
+    Sample the lengths of voiced and silence segments, measured in frames,
+    and return both as a tuple.
 
-savedir = args.savedir
-if os.path.isdir(savedir):
-    print(f"Directory '{savedir}' already exists!")
-    gen_counter = len(glob.glob(os.path.join(savedir, 'wav/*.wav')))
-    print(f'{args.workid} created {gen_counter} files already!')
-else:
-    gen_counter = 0
-os.makedirs(f"{savedir}" + "wav/", exist_ok=True)
-os.makedirs(f"{savedir}" + "label/", exist_ok=True)
-os.makedirs(f"{savedir}" + "targets/", exist_ok=True)
-os.makedirs(f"{savedir}" + "volumes/", exist_ok=True)
+    This function uses exponential distributions for the initial silent and
+    voiced segments, and then uses normal distributions for subsequent segments
+    while ensuring that durations remain positive. Finally, it appends an
+    additional silent segment specified by `duration`.
 
+    Args:
+        rng: A random number generator (NumPy's >=1.17 recommended interface).
+        repeat_times: The number of times to alternate between a silent
+            segment and a voiced segment.
+        scale_exp_silent: The scale parameter for the exponential distribution
+            used to sample the first silent segment (in seconds).
+        scale_exp_voiced: The scale parameter for the exponential distribution
+            used to sample the first voiced segment (in seconds).
+        scale_normal_silent: The standard deviation for the normal distribution
+            used to sample subsequent silent segments (in seconds).
+        scale_normal_voiced: The standard deviation for the normal distribution
+            used to sample subsequent voiced segments (in seconds).
+        duration: An additional duration in seconds to be appended as a final
+            silent segment after all repeats.
+        frames_per_sec: The number of frames per second (typically sample_rate // hop_size).
+        n_frames: The maximum total number of frames allowed.
 
-"""(0) Fixed paramater settings
-"""
+    Returns:
+        A tuple (voiced_durations, silent_durations), where each is a list of
+        segment lengths in frames. The final total of frames is capped at `n_frames`.
+    """
+    # verbose arrays
+    _silent_durations = []
+    _voiced_durations = []
 
-### Default kernel
-default_kernel = GPy.kern.RBF
+    # set by sec
+    for i in range(repeat_times):
+        if i == 0:
+            _silent_durations.append(rng.exponential(scale_exp_silent))
+            _voiced_durations.append(rng.exponential(scale_exp_voiced))
+            
+        else:
+            while True:
+                candidate_silent_duration = rng.normal(_silent_durations[-1], scale_normal_silent)
+                if candidate_silent_duration > 0:
+                    break
+            _silent_durations.append(candidate_silent_duration)
+            
+            while True:
+                candidate_voiced_duration = rng.normal(_voiced_durations[-1], scale_normal_voiced)
+                if candidate_voiced_duration > 0:
+                    break
+            _voiced_durations.append(candidate_voiced_duration)
 
-### Fixed parameter settings
-sample_rate = 16000
-n_frames = 2500
-hop_size = 64
-frames_per_sec = sample_rate // hop_size
-n_samples = n_frames * hop_size
-SILENCE = -10
-duration = n_samples / 16000
-n_frequencies = 1000
-noise_anchors = 10
-noise_vagueness = 10
-small_variance = 1e-2
+    # padding
+    _silent_durations.append(duration)
 
-max_n_to_mix = 4
-n_iter = args.n_iter
+    # change to frames
+    _silent_durations = [int(elm * frames_per_sec) for elm in _silent_durations]
+    _voiced_durations = [int(elm * frames_per_sec) for elm in _voiced_durations]
 
-error_count = 0
-while gen_counter < n_iter:
-    n_to_mix = rng.integers(1, max_n_to_mix + 1)
+    # arrays extracted from verbose arrays
+    silent_durations = []
+    voiced_durations = []
+    total_frames = 0
+
+    for i in range(repeat_times + 1):
+        silent_durations.append(_silent_durations[i])
+        total_frames += _silent_durations[i]
+        if total_frames >= n_frames:
+            silent_durations[-1] -= total_frames - n_frames
+            break
+            
+        voiced_durations.append(_voiced_durations[i])
+        total_frames += _voiced_durations[i]
+        if total_frames >= n_frames:
+            voiced_durations[-1] -= total_frames - n_frames
+            break
+    return voiced_durations, silent_durations
+
+def generate_one_sample(rng: np.random.Generator, max_n_to_mix: int, n_samples:int, small_variance:float, duration:float, frames_per_sec:int, n_frames:int,  default_kernel: Type[GPy.kern.Kern], n_frequencies:int, noise_anchors:int, noise_vagueness:int, sample_rate:int, workid:int):
+    n_to_mix = rng.integers(1, max_n_to_mix + 1) #the number of source audio to mix
     summed_wav = np.zeros(n_samples)
     i_mix = 0
     raw_target_list = []
@@ -168,66 +188,28 @@ while gen_counter < n_iter:
             local_f0_mel_variance = 10 ** rng.uniform(0, 4)  # 1e3
             local_f0_mel_lengthscale = 10 ** rng.uniform(-1, 1) # 1e-1
             local_section_f0_mel_variance = 10 ** rng.uniform(-1, 0) # 0.1
-            local_section_f0_mel_lengthscale = 10 ** rng.uniform(-1, 1) # 1
 
             # others
             n_harmonics = rng.integers(5, 51)  # 50, to_consider_as_label
             f0_quantize = rng.choice([False, True])
-            ir_diminin = rng.uniform(-150.0, -5.0)  # -100で無 -50で弱い -5で強い
+            ir_diminin = rng.uniform(-150.0, -5.0) 
 
 
             """(2) Sound generation
             """
 
-            ### Create voiced and unvoiced sections
-
-            # verbose arrays
-            _silent_durations = []
-            _voiced_durations = []
-
-            # set by sec
-            for i in range(repeat_times):
-                if i == 0:
-                    _silent_durations.append(rng.exponential(scale_exp_silent))
-                    _voiced_durations.append(rng.exponential(scale_exp_voiced))
-                    
-                else:
-                    while True:
-                        candidate_silent_duration = rng.normal(_silent_durations[-1], scale_normal_silent)
-                        if candidate_silent_duration > 0:
-                            break
-                    _silent_durations.append(candidate_silent_duration)
-                    
-                    while True:
-                        candidate_voiced_duration = rng.normal(_voiced_durations[-1], scale_normal_voiced)
-                        if candidate_voiced_duration > 0:
-                            break
-                    _voiced_durations.append(candidate_voiced_duration)
-
-            # padding
-            _silent_durations.append(duration)
-
-            # change to frames
-            _silent_durations = [int(elm * frames_per_sec) for elm in _silent_durations]
-            _voiced_durations = [int(elm * frames_per_sec) for elm in _voiced_durations]
-
-            # arrays extracted from verbose arrays
-            silent_durations = []
-            voiced_durations = []
-            total_frames = 0
-
-            for i in range(repeat_times + 1):
-                silent_durations.append(_silent_durations[i])
-                total_frames += _silent_durations[i]
-                if total_frames >= n_frames:
-                    silent_durations[-1] -= total_frames - n_frames
-                    break
-                    
-                voiced_durations.append(_voiced_durations[i])
-                total_frames += _voiced_durations[i]
-                if total_frames >= n_frames:
-                    voiced_durations[-1] -= total_frames - n_frames
-                    break
+            ### Sample voiced and unvoiced sections
+            voiced_durations, silent_durations = sample_voiced_silence_durations(
+                rng=rng,
+                repeat_times=repeat_times,         
+                scale_exp_silent=scale_exp_silent,   
+                scale_exp_voiced=scale_exp_voiced,  
+                scale_normal_silent=scale_normal_silent,
+                scale_normal_voiced=scale_normal_voiced,
+                duration=duration,           
+                frames_per_sec=frames_per_sec,     
+                n_frames=n_frames           
+            )
 
             n_sections = len(voiced_durations)
 
@@ -261,6 +243,7 @@ while gen_counter < n_iter:
             # Global envelope (harmonic <file-invariant>)
             harmonic_envelope_kernel_period = rng.uniform(0, 2*np.pi)
             harmonic_envelope_kernel_name, harmonic_envelope_kernel = kernel_sampler(
+                rng=rng,
                 variance=global_harmonic_envelope_variance, 
                 lengthscale=global_harmonic_envelope_lengthscale, 
                 period=harmonic_envelope_kernel_period)
@@ -271,18 +254,21 @@ while gen_counter < n_iter:
             harmonic_envelope_mean[0] = 0
 
             # Global envelope (noise <section-invariant, to interpolate>)
+            # Correlations are introduced across multiple time points (noise_anchors) in the frequency-domain noise distribution using an Intrinsic Coregionalization Model (ICM).
             x = np.linspace(0, 1, n_frequencies // noise_vagueness)
             x_ = np.stack((np.tile(x, noise_anchors), np.repeat(np.arange(noise_anchors), n_frequencies // noise_vagueness)), axis=-1)
             kernel_freq_period = rng.uniform(0, 2*np.pi)
             kernel_freq_name, kernel_freq = kernel_sampler(
+                rng=rng,
                 variance=global_noise_distribution_freq_variance, 
                 lengthscale=global_noise_distribution_freq_lengthscale,
                 period=kernel_freq_period)
             kernel_time = default_kernel(1, variance=global_noise_distribution_time_variance, lengthscale=global_noise_distribution_time_lengthscale)
-            W = np.linalg.cholesky(kernel_time.K(np.linspace(0, 1, noise_anchors)[:,None]) + np.eye(noise_anchors) * 1e-8)
-            icm_noise = GPy.util.multioutput.ICM(1, noise_anchors, kernel_freq, W_rank=noise_anchors, W=W, kappa=1e-8*np.ones(noise_anchors))
+            W_noise_time = np.linalg.cholesky(kernel_time.K(np.linspace(0, 1, noise_anchors)[:,None]) + np.eye(noise_anchors) * 1e-8)
+            # multi-output gaussian prosess
+            icm_noise = GPy.util.multioutput.ICM(1, noise_anchors, kernel_freq, W_rank=noise_anchors, W=W_noise_time, kappa=1e-8*np.ones(noise_anchors))
             noise_cor = icm_noise.K(x_)
-
+            # noise distribution (frequency * the number of noised section (noise_anchors))
             noise_distribution_to_interp = np.random.multivariate_normal(np.zeros(n_frequencies // noise_vagueness * noise_anchors), noise_cor)
             noise_distribution_to_interp = noise_distribution_to_interp.reshape(noise_anchors, -1).T
             noise_distribution_to_interp += -noise_distribution_to_interp.min(axis=0) + global_noise_distribution_initial_bias
@@ -296,6 +282,7 @@ while gen_counter < n_iter:
             # generate initial sample (not resampled)
             local_f0_mel_kernel_period = rng.uniform(0, 2*np.pi)
             local_f0_mel_kernel_name, local_f0_mel_kernel = kernel_sampler(
+                rng=rng,
                 variance=local_f0_mel_variance, 
                 lengthscale=local_f0_mel_lengthscale, 
                 period=local_f0_mel_kernel_period)
@@ -308,6 +295,7 @@ while gen_counter < n_iter:
                 variance=local_section_f0_mel_variance, 
                 lengthscale=local_section_f0_mel_variance
             )
+            # Introduce frequency-wise correlations across local sections.
             for i in range(n_sections-1):
                 diffs = np.random.multivariate_normal(np.zeros(500), local_section_f0_mel_kernel.K(x[:,None]) + 1e-8*np.identity(500))
                 local_f0_mels.append(local_f0_mels[-1] + diffs)
@@ -335,6 +323,7 @@ while gen_counter < n_iter:
             local_volume_hn_correlation_W = np.linalg.cholesky(local_volume_hn_correlation)
             local_volume_hn_K_period = rng.uniform(0, 2*np.pi)
             local_volume_hn_K_name, local_volume_hn_K = kernel_sampler(
+                rng=rng,
                 variance=local_volume_hn_variance, 
                 lengthscale=local_volume_hn_lengthscale, 
                 period=local_volume_hn_K_period)
@@ -357,7 +346,7 @@ while gen_counter < n_iter:
                 local_harmonic_volumes.append(local_harmonic_volumes[-1] + hn_diffs[:500])
                 local_noise_volumes.append(local_noise_volumes[-1] + hn_diffs[500:])
 
-            # resamplings
+            # resamplings and summation with global trend
             for e, _ in enumerate(voiced_durations):
                 x = np.linspace(0, 1, voiced_durations[e])
                 xp = np.linspace(0, 1, 500)
@@ -488,179 +477,89 @@ while gen_counter < n_iter:
             audio_wet /= np.abs(audio_wet).max()
 
             generated_audio = audio_wet[0]
-
-
-            """(3) Label generation
-            """
-
-            ### labels
-            """
-            有音区間継続長：1e-1 -- 1 / 1 -- 5 / 5 -- 1e1
-            調波非調波の広域音量バランス：
-                調波：-4~-1 / -1~2 / 2~5
-                非調波：-15~5 / 5~25 / 25~45
-                
-            大域F0変動幅：30**0 -- 30**0.5 / 30**0.5 -- 30**1 / 30**1 -- 30**1.5 / 30**1.5 -- 30**2
-            調波音域：50**1 -- 50**1.25 / 50**1.25 -- 50**1.5 / 50**1.5 -- 50**1.75 / 50**1.75 -- 50**2
-            調波包絡変動幅：1e-1 -- 1e-0.5 / 1e-0.5 -- 1e0 / 1e0 -- 1e0.5 / 1e0.5 -- 1e1
-
-            調波包絡激しさ：1e1 -- 1e1.5 / 1e1.5 -- 1e2 / 1e2 -- 1e2.5 / 1e2.5 -- 1e3
-            調波包絡下駄：1e-1 -- 1e-0.5 / 1e-0.5 -- 1e0 / 1e0 -- 1e0.5 / 1e0.5 -- 1e1
-            調波包絡重心：（つかわない）
-
-            調波包絡カーネル種類：８こ
-            非調波包絡下駄：1e-1 -- 1e-0.5 / 1e-0.5 -- 1e0 / 1e0 -- 1e0.5 / 1e0.5 -- 1e1
-            非調波包絡重心：10にわける
-
-            非調波包絡カーネル種類：８こ
-            調波非調波の局所音量相関：- / +
-            局所音量変動幅：1e0 -- 1e0.25 / 1e0.25 -- 1e0.5 / 1e0.5 -- 1e0.75 / 1e0.75 -- 1e1
-
-            局所音量カーネル種類：８こ
-            局所F0変動幅：1e0 -- 1e1 / 1e1 -- 1e2 / 1e2 -- 1e3 / 1e3 -- 1e4
-            局所F0変動激しさ：1e-1 -- 1e-0.5 / 1e-0.5 -- 1e0 / 1e0 -- 1e0.5 / 1e0.5 -- 1e1
-
-            局所F0カーネル種類：８こ
-            倍音数：5 -- 10 / 10 -- 30 / 30 -- 50
-            離散or連続音高：False / True
-            残響強度：-150 -- -100 / -100 -- -50 / -50 -- -5
-            """            
-
-            global_harmonic_envelope_center = None
+       
             global_noise_distribution_mode = np.argmax(np.mean(noise_distribution_to_interp, axis=1)) # noise_distribution_to_interp: (freq', time=(noise_anchors))
 
-            kernels_list = [
-                ["RBF", GPy.kern.RBF],  # variance, lengthscale
-                ["Exponential", GPy.kern.Exponential],  # variance, lengthscale
-                ["Cosine", GPy.kern.Cosine],  # variance, lengthscale
-                ["Linear", GPy.kern.Linear],  # variances
-                ["sde_Brownian", GPy.kern.sde_Brownian],  # variance
-                ["Poly", GPy.kern.Poly],  # variance, scale, bias, order
-                ["StdPeriodic", GPy.kern.StdPeriodic],  # variance, period, lengthscale
-                ["PeriodicExponential", GPy.kern.PeriodicExponential],  # variance, lengthscale, period=6.283185307179586, n_freq=10, lower=0.0, upper=12.566370614359172
-            ]
-
-            boundaries_of_kernels = [kernel[0] for kernel in sorted(kernels_list)[1:]]
-
-            boundaries_scale_exp_voiced = [1, 5]
-            boundaries_global_harmonic_volume_initial_bias = [-1, 2]
-            boundaries_global_noise_volume_initial_bias = [5, 25]
-
-            boundaries_global_f0_mel_variance = [30**0.5, 30**1., 30**1.5]
-            boundaries_global_f0_mel_initial_bias = [50**1.25, 50**1.5, 50**1.75]
-            boundaries_global_harmonic_envelope_variance = [10**-0.5, 10**0., 10**0.5]
-
-            boundaries_global_harmonic_envelope_lengthscale = [10**1.5, 10**2., 10**2.5]
-            boundaries_global_harmonic_envelope_initial_bias = [10**-0.5, 10**0., 10**0.5]
-            boundaries_global_harmonic_envelope_center = "Not use"
-
-            boundaries_harmonic_envelope_kernel_name = boundaries_of_kernels
-            boundaries_global_noise_distribution_initial_bias = [10**-0.5, 10**0., 10**0.5]
-            boundaries_global_noise_distribution_mode = np.linspace(10, 90, 9)
-
-            boundaries_kernel_freq_name = boundaries_of_kernels
-            boundaries_hn_cor = [0.]
-            boundaries_local_volume_hn_variance = [10**0.25, 10**0.5, 10**0.75]
-
-            boundaries_local_volume_hn_K_name = boundaries_of_kernels
-            boundaries_local_f0_mel_variance = [10**1, 10**2, 10**3]
-            boundaries_local_f0_mel_lengthscale = [10**-0.5, 10**0., 10**0.5]
-
-            boundaries_local_f0_mel_kernel_name = boundaries_of_kernels
-            boundaries_n_harmonics = [10, 30]
-            boundaries_f0_quantize = [0.5]
-            boundaries_ir_diminin = [-100, -50]
-
             raw_targets = np.array([scale_exp_voiced, global_harmonic_volume_initial_bias, global_noise_volume_initial_bias, global_f0_mel_variance, global_f0_mel_initial_bias, global_harmonic_envelope_variance, global_harmonic_envelope_lengthscale, global_harmonic_envelope_initial_bias, 
-                           labelize_kernel(harmonic_envelope_kernel_name), global_noise_distribution_initial_bias, global_noise_distribution_mode, labelize_kernel(kernel_freq_name), hn_cor, local_volume_hn_variance, labelize_kernel(local_volume_hn_K_name), 
-                           local_f0_mel_variance, local_f0_mel_lengthscale, labelize_kernel(local_f0_mel_kernel_name), n_harmonics, f0_quantize, ir_diminin])
+                        labelize_kernel(harmonic_envelope_kernel_name), global_noise_distribution_initial_bias, global_noise_distribution_mode, labelize_kernel(kernel_freq_name), hn_cor, local_volume_hn_variance, labelize_kernel(local_volume_hn_K_name), 
+                        local_f0_mel_variance, local_f0_mel_lengthscale, labelize_kernel(local_f0_mel_kernel_name), n_harmonics, f0_quantize, ir_diminin])
             # label information
             labels = {
-                # 有音区間継続長
+                # Duration of voiced segment
                 "label_scale_exp_voiced":
                     labelize(scale_exp_voiced, boundaries_scale_exp_voiced),
                 
-                # 調波非調波の広域音量バランス1
+                # Sharpness of global harmonic volume
                 "label_global_harmonic_volume_initial_bias":
                     labelize(global_harmonic_volume_initial_bias, boundaries_global_harmonic_volume_initial_bias), 
                 
-                # 調波非調波の広域音量バランス2
+                # Sharpness of global noise volume
                 "label_global_noise_volume_initial_bias":
                     labelize(global_noise_volume_initial_bias, boundaries_global_noise_volume_initial_bias),
                 
-                # 大域F0変動幅
+                # Global F0 variation range
                 "label_global_f0_mel_variance":
                     labelize(global_f0_mel_variance, boundaries_global_f0_mel_variance),
                         
-                # 調波音域
+                # # Harmonic pitch sharpness
                 "label_global_f0_mel_initial_bias":
                     labelize(global_f0_mel_initial_bias, boundaries_global_f0_mel_initial_bias),
                 
-                # 調波包絡変動幅
+                # Harmonic envelope variation range
                 "label_global_harmonic_envelope_variance":
                     labelize(global_harmonic_envelope_variance, boundaries_global_harmonic_envelope_variance),
                 
-                # 調波包絡激しさ
+                # Harmonic envelope lengthscale
                 "label_global_harmonic_envelope_lengthscale":
                     labelize(global_harmonic_envelope_lengthscale, boundaries_global_harmonic_envelope_lengthscale),
                 
-                # 調波包絡下駄
+                # Harmonic envelope sharpness
                 "label_global_harmonic_envelope_initial_bias":
                     labelize(global_harmonic_envelope_initial_bias, boundaries_global_harmonic_envelope_initial_bias),
-                
-            #     # 調波包絡重心
-            #     "label_global_harmonic_envelope_center":
-            #         labelize(global_harmonic_envelope_center, boundaries_global_harmonic_envelope_center),
+
                         
-                # 調波包絡カーネル種類
+                # Harmonic envelopne kernel
                 "label_harmonic_envelope_kernel_name":
                     labelize(harmonic_envelope_kernel_name, boundaries_harmonic_envelope_kernel_name),
                         
-                # 非調波包絡下駄
+                # Sharpness of the noise distribution along the frequency axis
                 "label_global_noise_distribution_initial_bias":
                     labelize(global_noise_distribution_initial_bias, boundaries_global_noise_distribution_initial_bias),
                         
-                # 非調波包絡重心
+                # Spectral centroid of the noise distribution
                 "label_global_noise_distribution_mode":
                     labelize(global_noise_distribution_mode, boundaries_global_noise_distribution_mode),
                         
-                # 非調波包絡カーネル種類
+                # Kernel type of the inharmonic envelope
                 "label_kernel_freq_name":
                     labelize(kernel_freq_name, boundaries_kernel_freq_name),
                         
-                # 調波非調波の局所音量相関      
+                # Local volume correlation between harmonic and inharmonic components
                 "label_hn_cor":
                     labelize(hn_cor, boundaries_hn_cor),
                         
-                # 局所音量変動幅 
+                # Local volume variance
                 "label_local_volume_hn_variance":
                     labelize(local_volume_hn_variance, boundaries_local_volume_hn_variance),
                         
-                # 局所音量カーネル種類    
+                # Kernel type of the local volume   
                 "label_local_volume_hn_K_name":
                     labelize(local_volume_hn_K_name, boundaries_local_volume_hn_K_name),
                         
-                # 局所F0変動幅   
+                # Local F0 variance
                 "label_local_f0_mel_variance":
                     labelize(local_f0_mel_variance, boundaries_local_f0_mel_variance),
                         
-                # 局所F0変動激しさ   
                 "label_local_f0_mel_lengthscale":
                     labelize(local_f0_mel_lengthscale, boundaries_local_f0_mel_lengthscale),
                         
-                # 局所F0カーネル種類    
                 "label_local_f0_mel_kernel_name":
                     labelize(local_f0_mel_kernel_name, boundaries_local_f0_mel_kernel_name),
-                        
-                # 倍音数         
+                                
                 "label_n_harmonics":
                     labelize(n_harmonics, boundaries_n_harmonics),
-                        
-                # 離散or連続音高    
                 "label_f0_quantize":
                     labelize(f0_quantize, boundaries_f0_quantize),
-                        
-                # 残響強度　-100で無 -50で弱い -5で強い 
                 "label_ir_diminin":
                     labelize(ir_diminin, boundaries_ir_diminin)
             }
@@ -686,8 +585,6 @@ while gen_counter < n_iter:
                 labels["label_hn_cor"] *= 0
 
 
-            # 音の有無
-
             # for 100ms label ([1025, 101] -> 100]), 10sec / 100 = 100ms.
             # powerspec = np.abs(stft(audio_wet[0], n_fft=2048, hop_length=1600)) ** 2
             # power = np.interp(np.linspace(0, 100, 100), np.linspace(0, 100, 101), np.sum(powerspec, axis=0))
@@ -702,9 +599,7 @@ while gen_counter < n_iter:
             raw_targets = raw_targets[:, None] * volume_on_frames
             aligned_label = label_all[:,None] * volume_on_frames
             raw_target_list.append(raw_targets)
-            # SN比
             sn_db_power = rng.uniform(-5, 5)
-            # print(f"sn_db_power: {sn_db_power}")
             sn_rate_power = 0.001 * (10 ** (sn_db_power / 10))
             summed_wav += generated_audio * np.sqrt(sn_rate_power)
 
@@ -715,29 +610,10 @@ while gen_counter < n_iter:
             
             i_mix += 1
 
-        except:
-            print(f"Work id {args.workid}: Skipped (Some error happened).")
-            error_count += 1
+        except Exception:
+            print(f"Work id {workid}: Skipped (Some error happened).")
     
-    # summed_wav /= n_to_mix
-    try:
-        assert summed_wav.max() < 1
-    except Exception:
-        print(f"Work id {args.workid}: Skipped (summed_wav.max() >= 1).")
-        continue
-
     summed_label = summed_label.sum(axis=0)
     summed_label = np.where(summed_label > 0, 1, 0).astype(np.int8)
 
-    sf.write(f'{savedir}' + f'wav/{gen_counter}_{n_to_mix}mix.wav', summed_wav, sample_rate, 'PCM_24')
-    np.save(f'{savedir}' + f'label/{gen_counter}_{n_to_mix}mix.npy', summed_label)
-    np.save(f'{savedir}' + f'targets/{gen_counter}_{n_to_mix}mix.npy', np.array(raw_target_list))
-    np.save(f'{savedir}' + f'volumes/{gen_counter}_{n_to_mix}mix.npy', np.array(volume_list))
-
-    gen_counter += 1
-    if (100 * gen_counter) % n_iter == 0:
-        print(f"Work id {args.workid}: {gen_counter}/{n_iter} ({(100 * gen_counter) // n_iter}%) done.")
-    
-
-print(f"Work id {args.workid}: Finished. Genarated {gen_counter} samples in total.")
-print(f"Work id {args.workid}: (During generation, {error_count} errors happened.)")
+    return summed_wav, summed_label, raw_target_list, volume_list
