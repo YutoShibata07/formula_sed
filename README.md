@@ -1,4 +1,4 @@
-# Formula-Supervised Sound Event Detection: Pre-Training Without Real Data
+# Formula-Supervised Sound Event Detection: Pre-Training Without Real Data (ICASSP2025)
 ![Overview](images/data_comparison_0331.png)
 This repo contains the official implementation of [Y.Shibata et al. "Formula-Supervised Sound Event Detection: Pre-Training Without Real Data" in ICASSP2025](https://yutoshibata07.github.io/Formula-SED/).
 
