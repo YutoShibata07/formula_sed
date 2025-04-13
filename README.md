@@ -48,6 +48,7 @@ root
 * `lib/kernels.py` samples kernel types used for global/local F0/volume variation.
 * `lib/labeling.py` is for discrete label generation.
 * `synth_params` is for dataclass of global/local synthesis parameters.
+* `sample_audios` are used for test.
 
 
 ## Installation
