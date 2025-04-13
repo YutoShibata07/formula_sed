@@ -1,16 +1,6 @@
 import GPy
 import numpy as np
-
-kernels_list = [
-    ["RBF", GPy.kern.RBF],  # variance, lengthscale
-    ["Exponential", GPy.kern.Exponential],  # variance, lengthscale
-    ["Cosine", GPy.kern.Cosine],  # variance, lengthscale
-    ["Linear", GPy.kern.Linear],  # variances
-    ["sde_Brownian", GPy.kern.sde_Brownian],  # variance
-    ["Poly", GPy.kern.Poly],  # variance, scale, bias, order
-    ["StdPeriodic", GPy.kern.StdPeriodic],  # variance, period, lengthscale
-    ["PeriodicExponential", GPy.kern.PeriodicExponential],  # variance, lengthscale, period=6.283185307179586, n_freq=10, lower=0.0, upper=12.566370614359172
-]
+from .kernels import kernels_list
 
 SILENCE = -10 # mel-spec values when generated data is silent
 

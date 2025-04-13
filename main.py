@@ -8,8 +8,8 @@ import soundfile as sf
 import glob
 import json
 
-from helper import generate_one_sample
-from synth_params.synth_settings import SynthesisParams
+from libs.audio_generation import generate_one_sample
+from libs.synth_params import SynthesisParams
 import random
 
 def main():

@@ -18,30 +18,36 @@ The aim is to facilitate research and development by offering synthetic data tha
 ## Directory Structure
 ```directory structure
 root
-├── constants.py
+├── data
+│   ├── label
+│   ├── synthesis_params.json
+│   ├── targets
+│   ├── volumes
+│   └── wav
+├── ddsp
 ├── environment.yml
-├── generate_audio.py
 ├── generate_multi_process.sh
-├── helper.py
 ├── images
+├── libs
+│   ├── audio_generation.py
+│   ├── constants.py
+│   ├── duration.py
+│   ├── kernels.py
+│   ├── labeling.py
+│   ├── synth_params
+│   └── utils.py
+├── main.py
 ├── README.md
-├── synth_params.py
-├── utils.py
-└── data
-    ├── label
-    ├── targets
-    ├── volumes
-    └── wav
+└── sample_audios
 ```
-* `constants.py` is for storing common constants, kernel definitions, and boundary settings used by the modeling process.
-* `generate_audio.py` is a script for audio chunk generation.
+* `data` is for saving the generated audio file, labels (discrete/continuous).
 * `generate_multi_process.sh` is for accelerated data generation through parallel processing.
-* `helper.py` contains some functions about sampling, labeling, and audio synthesis.
-* `synth_params.py` is for synthesis hyperparameters such as sample rate.
-* `data/label` contains generated multi-hot labels for each audio file.
-* `data/targets` contains generated continuous labels (without discretization) for each audio file.
-* `data/volumes` contains volumens of generated audio which are used for post-processing.
-* `data/wav` contains generated audio files.
+* `lib/audio_generation.py` is for single audio file generation.
+* `libs/constants.py` is for storing common constants (boundary settings used by the modeling process).
+* `lib/duration.py` samples random duration.
+* `lib/kernels.py` samples kernel types used for global/local F0/volume variation.
+* `lib/labeling.py` is for discrete label generation.
+* `synth_params` is for dataclass of global/local synthesis parameters.
 
 
 ## Installation
@@ -60,7 +66,7 @@ python -c "import numpy as np; np.show_config()"
 You will see "mkl-sdl" as the output.
 ## Data Generation (single Process)
 ```bash
-python3 ./generate_audio.py --workid=0 --savedir=data --n_iter=2 --seed=0 
+python3 ./main.py --workid=0 --savedir=data --n_iter=2 --seed=0 
 ```
 For reproducibility, please verify that the two audio files in the `sample_audios/` directory have been successfully generated in the `data/` directory. 
 ## Data Generation (Multi Process)
@@ -87,4 +93,7 @@ If you use the results of this project, please cite the following reference:
   pages={1-5},
   keywords={Training;Accuracy;Event detection;Noise;Supervised learning;Training data;Acoustics;Mathematical models;Timing;Synthetic data;sound event detection;pre-training without real data;environmental sound synthesis},
   doi={10.1109/ICASSP49660.2025.10888414}}
+```
+## Reference
 
+* Jesse Engel et al., "DDSP: Differentiable Digital Signal Processing", in ICLR2020 ([paper](https://arxiv.org/abs/2001.04643))
