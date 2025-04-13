@@ -3,6 +3,10 @@ import numpy as np
 
 @dataclass
 class GlobalParams:
+    scale_exp_silent:float
+    scale_exp_voiced:float
+    scale_normal_silent:float
+    scale_normal_voiced:float
     volume_variance: float
     volume_lengthscale: float
     volume_cov: np.ndarray

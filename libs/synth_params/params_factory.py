@@ -3,6 +3,10 @@ from .global_params import GlobalParams
 from .local_params import LocalParams
 
 def sample_global_params(rng: np.random.Generator, small_variance: float) -> GlobalParams:
+    scale_exp_silent = 10 ** rng.uniform(-1, 0.5) # 1e-1
+    scale_exp_voiced = 10 ** rng.uniform(-1, 1) # 1e1
+    scale_normal_silent = small_variance
+    scale_normal_voiced = small_variance
     volume_variance = small_variance
     volume_lengthscale = 1.0
     volume_cov = np.array([[1.0, 0.99], [0.99, 1.0]])
@@ -30,6 +34,10 @@ def sample_global_params(rng: np.random.Generator, small_variance: float) -> Glo
     
 
     return GlobalParams(
+        scale_exp_silent=scale_exp_silent,
+        scale_exp_voiced=scale_exp_voiced,
+        scale_normal_silent=scale_normal_silent,
+        scale_normal_voiced=scale_normal_voiced,
         volume_variance=volume_variance,
         volume_lengthscale=volume_lengthscale,
         volume_cov=volume_cov,
