@@ -19,13 +19,10 @@ class Processor(object):
     def __init__(self):
         super().__init__()
 
-    def __call__(self,
-            *args,
-            return_outputs_dict=False,
-            **kwargs):
+    def __call__(self, *args, return_outputs_dict=False, **kwargs):
         """Convert input tensors arguments into a signal tensor."""
         # Don't use `training` or `mask` arguments from keras.Layer.
-        for k in ['training', 'mask']:
+        for k in ["training", "mask"]:
             if k in kwargs:
                 _ = kwargs.pop(k)
 

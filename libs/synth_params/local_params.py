@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
+
+
 @dataclass
 class LocalParams:
     hn_cor: float

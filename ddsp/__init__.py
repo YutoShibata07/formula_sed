@@ -24,4 +24,3 @@ from ddsp import core
 from ddsp import effects
 from ddsp import processors
 from ddsp import synths
-

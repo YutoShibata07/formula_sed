@@ -2,7 +2,6 @@
 (https://github.com/magenta/ddsp)
 """
 
-
 import numpy as np
 
 from ddsp import core
@@ -12,13 +11,15 @@ from ddsp import processors
 class Harmonic(processors.Processor):
     """Synthesize audio with a bank of harmonic sinusoidal oscillators."""
 
-    def __init__(self,
-                 n_samples=64000,
-                 sample_rate=16000,
-                 scale_fn=core.exp_sigmoid,
-                 normalize_below_nyquist=True,
-                 amp_resample_method='window',
-                 use_angular_cumsum=False):
+    def __init__(
+        self,
+        n_samples=64000,
+        sample_rate=16000,
+        scale_fn=core.exp_sigmoid,
+        normalize_below_nyquist=True,
+        amp_resample_method="window",
+        use_angular_cumsum=False,
+    ):
         """Constructor.
 
         Args:
@@ -46,10 +47,7 @@ class Harmonic(processors.Processor):
         self.amp_resample_method = amp_resample_method
         self.use_angular_cumsum = use_angular_cumsum
 
-    def get_controls(self,
-                     amplitudes,
-                     harmonic_distribution,
-                     f0_hz):
+    def get_controls(self, amplitudes, harmonic_distribution, f0_hz):
         """Convert network output tensors into a dictionary of synthesizer controls.
 
         Args:
@@ -71,9 +69,11 @@ class Harmonic(processors.Processor):
         #     harmonic_distribution, f0_hz,
         #     self.sample_rate if self.normalize_below_nyquist else None)
 
-        return {'amplitudes': amplitudes,
-                'harmonic_distribution': harmonic_distribution,
-                'f0_hz': f0_hz}
+        return {
+            "amplitudes": amplitudes,
+            "harmonic_distribution": harmonic_distribution,
+            "f0_hz": f0_hz,
+        }
 
     def get_signal(self, amplitudes, harmonic_distribution, f0_hz):
         """Synthesize audio with harmonic synthesizer from controls.
@@ -97,18 +97,21 @@ class Harmonic(processors.Processor):
             n_samples=self.n_samples,
             sample_rate=self.sample_rate,
             amp_resample_method=self.amp_resample_method,
-            use_angular_cumsum=self.use_angular_cumsum)
+            use_angular_cumsum=self.use_angular_cumsum,
+        )
         return signal
 
 
 class FilteredNoise(processors.Processor):
     """Synthesize audio by filtering white noise."""
 
-    def __init__(self,
-                 n_samples=64000,
-                 window_size=257,
-                 scale_fn=core.exp_sigmoid,
-                 initial_bias=-5.0):
+    def __init__(
+        self,
+        n_samples=64000,
+        window_size=257,
+        scale_fn=core.exp_sigmoid,
+        initial_bias=-5.0,
+    ):
         super().__init__()
         self.n_samples = n_samples
         self.window_size = window_size
@@ -131,8 +134,7 @@ class FilteredNoise(processors.Processor):
         if self.scale_fn is not None:
             noise_amps = self.scale_fn(noise_amps + self.initial_bias)
 
-        return {'noise_amps': noise_amps,
-                'noise_distribution': noise_distribution}
+        return {"noise_amps": noise_amps, "noise_distribution": noise_distribution}
 
     def get_signal(self, noise_amps, noise_distribution):
         """Synthesize audio with filtered white noise.
@@ -149,10 +151,7 @@ class FilteredNoise(processors.Processor):
         """
         batch_size = int(noise_amps.shape[0])
         rng = np.random.default_rng()
-        signal = rng.uniform(
-            low=-1.0, high=1.0, size=[batch_size, self.n_samples])
+        signal = rng.uniform(low=-1.0, high=1.0, size=[batch_size, self.n_samples])
         magnitudes = noise_amps * noise_distribution
         magnitudes *= noise_distribution.shape[-1] / 10 * 2
-        return core.frequency_filter(signal,
-                                     magnitudes,
-                                     window_size=self.window_size)
+        return core.frequency_filter(signal, magnitudes, window_size=self.window_size)

@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Tuple
 
+
 def sample_voiced_silence_durations(
     rng: np.random.Generator,
     repeat_times: int,
@@ -10,7 +11,7 @@ def sample_voiced_silence_durations(
     scale_normal_voiced: float,
     duration: float,
     frames_per_sec: int,
-    n_frames: int
+    n_frames: int,
 ) -> Tuple[List[int], List[int]]:
     """
     Sample the lengths of voiced and silence segments, measured in frames,
@@ -51,16 +52,20 @@ def sample_voiced_silence_durations(
         if i == 0:
             _silent_durations.append(rng.exponential(scale_exp_silent))
             _voiced_durations.append(rng.exponential(scale_exp_voiced))
-            
+
         else:
             while True:
-                candidate_silent_duration = rng.normal(_silent_durations[-1], scale_normal_silent)
+                candidate_silent_duration = rng.normal(
+                    _silent_durations[-1], scale_normal_silent
+                )
                 if candidate_silent_duration > 0:
                     break
             _silent_durations.append(candidate_silent_duration)
-            
+
             while True:
-                candidate_voiced_duration = rng.normal(_voiced_durations[-1], scale_normal_voiced)
+                candidate_voiced_duration = rng.normal(
+                    _voiced_durations[-1], scale_normal_voiced
+                )
                 if candidate_voiced_duration > 0:
                     break
             _voiced_durations.append(candidate_voiced_duration)
@@ -83,7 +88,7 @@ def sample_voiced_silence_durations(
         if total_frames >= n_frames:
             silent_durations[-1] -= total_frames - n_frames
             break
-            
+
         voiced_durations.append(_voiced_durations[i])
         total_frames += _voiced_durations[i]
         if total_frames >= n_frames:

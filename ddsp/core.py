@@ -2,7 +2,6 @@
 (https://github.com/magenta/ddsp)
 """
 
-
 import numpy as np
 from scipy import fftpack
 from scipy.fft import irfft, rfft
@@ -44,9 +43,9 @@ def pad_axis(x, padding=(0, 0), axis=0, **pad_kwargs):
 
 # line 207
 def safe_divide(numerator, denominator, eps=1e-7):
-  """Avoid dividing by zero by adding a small epsilon."""
-  safe_denominator = np.where(denominator==0.0, eps, denominator)
-  return numerator / safe_denominator
+    """Avoid dividing by zero by adding a small epsilon."""
+    safe_denominator = np.where(denominator == 0.0, eps, denominator)
+    return numerator / safe_denominator
 
 
 # line 387
@@ -67,14 +66,11 @@ def exp_sigmoid(x, exponent=10.0, max_value=2.0, threshold=1e-7):
         A tensor with pointwise nonlinearity applied.
     """
     x = np_float32(x)
-    return max_value * np_sigmoid(x)**np.log(exponent) + threshold
+    return max_value * np_sigmoid(x) ** np.log(exponent) + threshold
 
 
 # line 573
-def resample(inputs,
-             n_timesteps,
-             method='linear',
-             add_endpoint=True):
+def resample(inputs, n_timesteps, method="linear", add_endpoint=True):
     """Interpolates a tensor from n_frames to n_timesteps.
 
     Args:
@@ -125,13 +121,16 @@ def resample(inputs,
         return outputs[:, :, 0, :] if not is_4d else outputs
 
     # Perform resampling.
-    if method in ('nearest', 'linear', 'cubic'):
+    if method in ("nearest", "linear", "cubic"):
         outputs = _resize_by_interp(method)
-    elif method == 'window':
+    elif method == "window":
         outputs = upsample_with_windows(inputs, n_timesteps, add_endpoint)
     else:
-        raise ValueError('Method ({}) is invalid. Must be one of {}.'.format(
-            method, "['nearest', 'linear', 'cubic', 'window']"))
+        raise ValueError(
+            "Method ({}) is invalid. Must be one of {}.".format(
+                method, "['nearest', 'linear', 'cubic', 'window']"
+            )
+        )
 
     # Return outputs to the same dimensionality of the inputs.
     if is_1d:
@@ -167,8 +166,11 @@ def upsample_with_windows(inputs, n_timesteps, add_endpoint=True):
     inputs = np_float32(inputs)
 
     if len(inputs.shape) != 3:
-        raise ValueError('Upsample_with_windows() only supports 3 dimensions, '
-                         'not {}.'.format(inputs.shape))
+        raise ValueError(
+            "Upsample_with_windows() only supports 3 dimensions, not {}.".format(
+                inputs.shape
+            )
+        )
 
     # Mimic behavior of tf.image.resize.
     # For forward (not endpointed), hold value for last interval.
@@ -176,20 +178,23 @@ def upsample_with_windows(inputs, n_timesteps, add_endpoint=True):
         inputs = np.concatenate([inputs, inputs[:, -1:, :]], axis=1)
 
     n_frames = int(inputs.shape[1])
-    n_intervals = (n_frames - 1)
+    n_intervals = n_frames - 1
 
     if n_frames >= n_timesteps:
-        raise ValueError('Upsample with windows cannot be used for downsampling'
-                         'More input frames ({}) than output timesteps ({})'.format(
-                            n_frames, n_timesteps))
+        raise ValueError(
+            "Upsample with windows cannot be used for downsampling"
+            "More input frames ({}) than output timesteps ({})".format(
+                n_frames, n_timesteps
+            )
+        )
 
     if n_timesteps % n_intervals != 0.0:
-        minus_one = '' if add_endpoint else ' - 1'
+        minus_one = "" if add_endpoint else " - 1"
         raise ValueError(
-            'For upsampling, the target the number of timesteps must be divisible '
-            'by the number of input frames{}. (timesteps:{}, frames:{}, '
-            'add_endpoint={}).'.format(minus_one, n_timesteps, n_frames,
-                                    add_endpoint))
+            "For upsampling, the target the number of timesteps must be divisible "
+            "by the number of input frames{}. (timesteps:{}, frames:{}, "
+            "add_endpoint={}).".format(minus_one, n_timesteps, n_frames, add_endpoint)
+        )
 
     # Constant overlap-add, half overlapping windows.
     hop_size = n_timesteps // n_intervals
@@ -203,17 +208,21 @@ def upsample_with_windows(inputs, n_timesteps, add_endpoint=True):
     # Add dimension for windows [batch_size, n_channels, n_frames, window].
     x = x[:, :, :, np.newaxis]
     window = window[np.newaxis, np.newaxis, np.newaxis, :]
-    x_windowed = (x * window)
+    x_windowed = x * window
 
     # new closure
     def _overlap_and_add(hop_size):
         oamat = np.zeros(
-                    (x_windowed.shape[0], 
-                     x_windowed.shape[1],
-                     n_intervals * hop_size + x_windowed.shape[3])
-                )  # [batch_size, n_channels, n_timesteps]
+            (
+                x_windowed.shape[0],
+                x_windowed.shape[1],
+                n_intervals * hop_size + x_windowed.shape[3],
+            )
+        )  # [batch_size, n_channels, n_timesteps]
         for i in range(n_intervals):
-            oamat[:,:, i*hop_size : i*hop_size + x_windowed.shape[3]] += x_windowed[:,:,i,:] 
+            oamat[:, :, i * hop_size : i * hop_size + x_windowed.shape[3]] += (
+                x_windowed[:, :, i, :]
+            )
         return oamat
 
     x = _overlap_and_add(hop_size)
@@ -271,8 +280,9 @@ def angular_cumsum(angular_frequency, chunk_size=1000):
     # Split input into chunks.
     length = angular_frequency.shape[1]
     n_chunks = int(length / chunk_size)
-    chunks = np.reshape(angular_frequency,
-                        [n_batch, n_chunks, chunk_size] + [-1] * n_ch_dims)
+    chunks = np.reshape(
+        angular_frequency, [n_batch, n_chunks, chunk_size] + [-1] * n_ch_dims
+    )
     phase = np.cumsum(chunks, axis=2)
 
     # Add offsets.
@@ -296,9 +306,7 @@ def angular_cumsum(angular_frequency, chunk_size=1000):
 
 
 # line 869
-def remove_above_nyquist(frequency_envelopes, 
-                         amplitude_envelopes,
-                         sample_rate=16000):
+def remove_above_nyquist(frequency_envelopes, amplitude_envelopes, sample_rate=16000):
     """Set amplitudes for oscillators above nyquist to 0.
 
     Args:
@@ -317,7 +325,9 @@ def remove_above_nyquist(frequency_envelopes,
 
     amplitude_envelopes = np.where(
         np.greater_equal(frequency_envelopes, sample_rate / 2.0),
-        np.zeros_like(amplitude_envelopes), amplitude_envelopes)
+        np.zeros_like(amplitude_envelopes),
+        amplitude_envelopes,
+    )
     return amplitude_envelopes
 
 
@@ -329,21 +339,24 @@ def normalize_harmonics(harmonic_distribution, f0_hz=None, sample_rate=None):
         n_harmonics = int(harmonic_distribution.shape[-1])
         harmonic_frequencies = get_harmonic_frequencies(f0_hz, n_harmonics)
         harmonic_distribution = remove_above_nyquist(
-            harmonic_frequencies, harmonic_distribution, sample_rate)
+            harmonic_frequencies, harmonic_distribution, sample_rate
+        )
 
     # Normalize
     harmonic_distribution = safe_divide(
-        harmonic_distribution,
-        np.sum(harmonic_distribution, axis=-1, keepdims=True))
+        harmonic_distribution, np.sum(harmonic_distribution, axis=-1, keepdims=True)
+    )
     return harmonic_distribution
 
 
 # line 912
-def oscillator_bank(frequency_envelopes,
-                    amplitude_envelopes,
-                    sample_rate=16000,
-                    sum_sinusoids=True,
-                    use_angular_cumsum=False):
+def oscillator_bank(
+    frequency_envelopes,
+    amplitude_envelopes,
+    sample_rate=16000,
+    sum_sinusoids=True,
+    use_angular_cumsum=False,
+):
     """Generates audio from sample-wise frequencies for a bank of oscillators.
 
     Args:
@@ -369,9 +382,9 @@ def oscillator_bank(frequency_envelopes,
     amplitude_envelopes = np_float32(amplitude_envelopes)
 
     # Don't exceed Nyquist.
-    amplitude_envelopes = remove_above_nyquist(frequency_envelopes,
-                                               amplitude_envelopes,
-                                               sample_rate)
+    amplitude_envelopes = remove_above_nyquist(
+        frequency_envelopes, amplitude_envelopes, sample_rate
+    )
 
     # Angular frequency, Hz -> radians per sample.
     omegas = frequency_envelopes * (2.0 * np.pi)  # rad / sec
@@ -413,14 +426,16 @@ def get_harmonic_frequencies(frequencies, n_harmonics):
 
 
 # line 1048
-def harmonic_synthesis(frequencies,
-                       amplitudes,
-                       harmonic_shifts=None,
-                       harmonic_distribution=None,
-                       n_samples=64000,
-                       sample_rate=16000,
-                       amp_resample_method='window',
-                       use_angular_cumsum=False):
+def harmonic_synthesis(
+    frequencies,
+    amplitudes,
+    harmonic_shifts=None,
+    harmonic_distribution=None,
+    n_samples=64000,
+    sample_rate=16000,
+    amp_resample_method="window",
+    use_angular_cumsum=False,
+):
     """Generate audio from frame-wise monophonic harmonic oscillator bank.
 
     Args:
@@ -458,7 +473,7 @@ def harmonic_synthesis(frequencies,
     # Create harmonic frequencies [batch_size, n_frames, n_harmonics].
     harmonic_frequencies = get_harmonic_frequencies(frequencies, n_harmonics)
     if harmonic_shifts is not None:
-        harmonic_frequencies *= (1.0 + harmonic_shifts)
+        harmonic_frequencies *= 1.0 + harmonic_shifts
 
     # Create harmonic amplitudes [batch_size, n_frames, n_harmonics].
     if harmonic_distribution is not None:
@@ -468,14 +483,17 @@ def harmonic_synthesis(frequencies,
 
     # Create sample-wise envelopes.
     frequency_envelopes = resample(harmonic_frequencies, n_samples)  # cycles/sec
-    amplitude_envelopes = resample(harmonic_amplitudes, n_samples,
-                                   method=amp_resample_method)
+    amplitude_envelopes = resample(
+        harmonic_amplitudes, n_samples, method=amp_resample_method
+    )
 
     # Synthesize from harmonics [batch_size, n_samples].
-    audio = oscillator_bank(frequency_envelopes,
-                            amplitude_envelopes,
-                            sample_rate=sample_rate,
-                            use_angular_cumsum=use_angular_cumsum)
+    audio = oscillator_bank(
+        frequency_envelopes,
+        amplitude_envelopes,
+        sample_rate=sample_rate,
+        use_angular_cumsum=use_angular_cumsum,
+    )
     return audio
 
 
@@ -495,15 +513,14 @@ def get_fft_size(frame_size, ir_size, power_of_2=True):
     convolved_frame_size = ir_size + frame_size - 1
     if power_of_2:
         # Next power of 2.
-        fft_size = int(2**np.ceil(np.log2(convolved_frame_size)))
+        fft_size = int(2 ** np.ceil(np.log2(convolved_frame_size)))
     else:
         fft_size = int(fftpack.helper.next_fast_len(convolved_frame_size))
     return fft_size
 
 
 # line 1338
-def crop_and_compensate_delay(audio, audio_size, ir_size, padding,
-                              delay_compensation):
+def crop_and_compensate_delay(audio, audio_size, ir_size, padding, delay_compensation):
     """Crop audio output from convolution to compensate for group delay.
 
     Args:
@@ -526,28 +543,27 @@ def crop_and_compensate_delay(audio, audio_size, ir_size, padding,
         ValueError: If padding is not either 'valid' or 'same'.
     """
     # Crop the output.
-    if padding == 'valid':
+    if padding == "valid":
         crop_size = ir_size + audio_size - 1
-    elif padding == 'same':
+    elif padding == "same":
         crop_size = audio_size
     else:
-        raise ValueError('Padding must be \'valid\' or \'same\', instead '
-                        'of {}.'.format(padding))
+        raise ValueError(
+            "Padding must be 'valid' or 'same', instead of {}.".format(padding)
+        )
 
     # Compensate for the group delay of the filter by trimming the front.
     # For an impulse response produced by frequency_impulse_response(),
     # the group delay is constant because the filter is linear phase.
     total_size = int(audio.shape[-1])
     crop = total_size - crop_size
-    start = ((ir_size - 1) // 2 -
-            1 if delay_compensation < 0 else delay_compensation)
+    start = (ir_size - 1) // 2 - 1 if delay_compensation < 0 else delay_compensation
     end = crop - start
     return audio[:, start:-end]
 
 
 # line 1382
-def fft_convolve(audio, impulse_response, 
-                 padding='same', delay_compensation=-1):
+def fft_convolve(audio, impulse_response, padding="same", delay_compensation=-1):
     """Filter audio with frames of time-varying impulse responses.
 
     Time-varying filter. Given audio [batch, n_samples], and a series of impulse
@@ -604,8 +620,10 @@ def fft_convolve(audio, impulse_response,
 
     # Validate that batch sizes match.
     if batch_size != batch_size_ir:
-        raise ValueError('Batch size of audio ({}) and impulse response ({}) must '
-                         'be the same.'.format(batch_size, batch_size_ir))
+        raise ValueError(
+            "Batch size of audio ({}) and impulse response ({}) must "
+            "be the same.".format(batch_size, batch_size_ir)
+        )
 
     # Cut audio into frames.
     frame_size = int(np.ceil(audio_size / n_ir_frames))
@@ -616,19 +634,22 @@ def fft_convolve(audio, impulse_response,
         n_frames = -(-audio_size // hop_size)
         mat = np.zeros((audio.shape[0], n_frames, frame_size))
         for i in range(n_frames):
-            mat[:,i,:] = audio[:, i*frame_size : (i+1)*frame_size]  # [batch_size, n_frames, frame_size]
+            mat[:, i, :] = audio[
+                :, i * frame_size : (i + 1) * frame_size
+            ]  # [batch_size, n_frames, frame_size]
         return mat
-        
+
     audio_frames = _frame(frame_size, hop_size)
 
     # Check that number of frames match.
     n_audio_frames = int(audio_frames.shape[1])
     if n_audio_frames != n_ir_frames:
         raise ValueError(
-            'Number of Audio frames ({}) and impulse response frames ({}) do not '
-            'match. For small hop size = ceil(audio_size / n_ir_frames), '
-            'number of impulse response frames must be a multiple of the audio '
-            'size.'.format(n_audio_frames, n_ir_frames))
+            "Number of Audio frames ({}) and impulse response frames ({}) do not "
+            "match. For small hop size = ceil(audio_size / n_ir_frames), "
+            "number of impulse response frames must be a multiple of the audio "
+            "size.".format(n_audio_frames, n_ir_frames)
+        )
 
     # Pad and FFT the audio and impulse responses.
     fft_size = get_fft_size(frame_size, ir_size, power_of_2=True)
@@ -645,23 +666,27 @@ def fft_convolve(audio, impulse_response,
     def _overlap_and_add(hop_size):
         n_intervals = n_audio_frames - 1
         oamat = np.zeros(
-                    (audio_frames_out.shape[0],
-                     n_intervals * hop_size + audio_frames_out.shape[2])
-                )  # [batch_size, n_timesteps]
+            (
+                audio_frames_out.shape[0],
+                n_intervals * hop_size + audio_frames_out.shape[2],
+            )
+        )  # [batch_size, n_timesteps]
         for i in range(n_audio_frames):
-            oamat[:,i*hop_size : i*hop_size + audio_frames_out.shape[2]] += audio_frames_out[:,i,:] 
+            oamat[:, i * hop_size : i * hop_size + audio_frames_out.shape[2]] += (
+                audio_frames_out[:, i, :]
+            )
         return oamat
 
     audio_out = _overlap_and_add(hop_size)
 
     # Crop and shift the output audio.
-    return crop_and_compensate_delay(audio_out, audio_size, ir_size, padding,
-                                   delay_compensation)
+    return crop_and_compensate_delay(
+        audio_out, audio_size, ir_size, padding, delay_compensation
+    )
 
 
 # line 1477
-def apply_window_to_impulse_response(impulse_response, window_size=0,
-                                     causal=False):
+def apply_window_to_impulse_response(impulse_response, window_size=0, causal=False):
     """Apply a window to an impulse response and put in causal form.
 
     Args:
@@ -693,9 +718,9 @@ def apply_window_to_impulse_response(impulse_response, window_size=0,
     padding = ir_size - window_size
     if padding > 0:
         half_idx = (window_size + 1) // 2
-        window = np.concatenate([window[half_idx:],
-                                 np.zeros([padding]),
-                                 window[:half_idx]], axis=0)
+        window = np.concatenate(
+            [window[half_idx:], np.zeros([padding]), window[:half_idx]], axis=0
+        )
     else:
         window = np.fft.fftshift(window, axes=-1)
 
@@ -707,9 +732,13 @@ def apply_window_to_impulse_response(impulse_response, window_size=0,
     if padding > 0:
         first_half_start = (ir_size - (half_idx - 1)) + 1
         second_half_end = half_idx + 1
-        impulse_response = np.concatenate([impulse_response[..., first_half_start:],
-                                           impulse_response[..., :second_half_end]],
-                                           axis=-1)
+        impulse_response = np.concatenate(
+            [
+                impulse_response[..., first_half_start:],
+                impulse_response[..., :second_half_end],
+            ],
+            axis=-1,
+        )
     else:
         impulse_response = np.fft.fftshift(impulse_response, axes=-1)
 
@@ -740,18 +769,17 @@ def frequency_impulse_response(magnitudes, window_size=0):
         ValueError: If window size is larger than fft size.
     """
     # Get the IR (zero-phase form).
-    magnitudes = magnitudes + np.zeros_like(magnitudes) * 1.j
+    magnitudes = magnitudes + np.zeros_like(magnitudes) * 1.0j
     impulse_response = irfft(magnitudes)
 
     # Window and put in causal form.
-    impulse_response = apply_window_to_impulse_response(impulse_response,
-                                                        window_size)
+    impulse_response = apply_window_to_impulse_response(impulse_response, window_size)
 
     return impulse_response
 
 
 # line 1628
-def frequency_filter(audio, magnitudes, window_size=0, padding='same'):
+def frequency_filter(audio, magnitudes, window_size=0, padding="same"):
     """Filter audio with a finite impulse response filter.
 
     Args:
@@ -773,6 +801,5 @@ def frequency_filter(audio, magnitudes, window_size=0, padding='same'):
             [batch, audio_timesteps + window_size - 1] ('valid' padding) or shape
             [batch, audio_timesteps] ('same' padding).
     """
-    impulse_response = frequency_impulse_response(magnitudes,
-                                                  window_size=window_size)
+    impulse_response = frequency_impulse_response(magnitudes, window_size=window_size)
     return fft_convolve(audio, impulse_response, padding=padding)

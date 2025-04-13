@@ -2,9 +2,12 @@ import numpy as np
 from .global_params import GlobalParams
 from .local_params import LocalParams
 
-def sample_global_params(rng: np.random.Generator, small_variance: float) -> GlobalParams:
-    scale_exp_silent = 10 ** rng.uniform(-1, 0.5) # 1e-1
-    scale_exp_voiced = 10 ** rng.uniform(-1, 1) # 1e1
+
+def sample_global_params(
+    rng: np.random.Generator, small_variance: float
+) -> GlobalParams:
+    scale_exp_silent = 10 ** rng.uniform(-1, 0.5)  # 1e-1
+    scale_exp_voiced = 10 ** rng.uniform(-1, 1)  # 1e1
     scale_normal_silent = small_variance
     scale_normal_voiced = small_variance
     volume_variance = small_variance
@@ -31,7 +34,6 @@ def sample_global_params(rng: np.random.Generator, small_variance: float) -> Glo
     n_harmonics = rng.integers(5, 51)
     f0_quantize = rng.choice([False, True])
     ir_diminin = rng.uniform(-150.0, -5.0)
-    
 
     return GlobalParams(
         scale_exp_silent=scale_exp_silent,
@@ -56,9 +58,10 @@ def sample_global_params(rng: np.random.Generator, small_variance: float) -> Glo
         noise_distribution_initial_bias=noise_distribution_initial_bias,
         n_harmonics=n_harmonics,
         f0_quantize=f0_quantize,
-        ir_diminin=ir_diminin
+        ir_diminin=ir_diminin,
     )
-    
+
+
 def sample_local_params(rng: np.random.Generator, small_variance: float) -> LocalParams:
     hn_cor = rng.uniform(0.8, 1.0) * rng.choice([-1, 1])
     volume_hn_correlation = np.array([[1, hn_cor], [hn_cor, 1]])
