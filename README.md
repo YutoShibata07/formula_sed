@@ -18,6 +18,7 @@ The aim is to facilitate research and development by offering synthetic data tha
 ## Directory Structure
 ```directory structure
 root
+├── audio_samples
 ├── data
 │   ├── label
 │   ├── synthesis_params.json
@@ -38,8 +39,9 @@ root
 │   └── utils.py
 ├── main.py
 ├── README.md
-└── sample_audios
+
 ```
+* `audios_samples` are used for test.
 * `data` is for saving the generated audio file, labels (discrete/continuous).
 * `generate_multi_process.sh` is for accelerated data generation through parallel processing.
 * `lib/audio_generation.py` is for single audio file generation.
@@ -48,7 +50,6 @@ root
 * `lib/kernels.py` samples kernel types used for global/local F0/volume variation.
 * `lib/labeling.py` is for discrete label generation.
 * `synth_params` is for dataclass of global/local synthesis parameters.
-* `sample_audios` are used for test.
 
 
 ## Installation
@@ -69,7 +70,7 @@ You will see `libraries = ['mkl_rt', 'pthread']` as the output.
 ```bash
 python3 ./main.py --workid=0 --savedir=data --n_iter=2 --seed=0 
 ```
-For reproducibility, please verify that the two audio files in the `sample_audios/` directory have been successfully generated in the `data/` directory. 
+For reproducibility, please verify that the two audio files in the `audio_samples/` directory have been successfully generated in the `data/` directory. 
 ## Data Generation (Multi Process)
 By using `Intel MKL`, you can limit the number of threads used by each process to prevent conflicts between processes. Please adjust the number of parallel processes according to the number of available CPU cores in your environment.
 ```bash
