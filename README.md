@@ -80,7 +80,7 @@ Stay tuned for updates regarding the release of the pre-training code. We apprec
 
 ## License
 
-This repository is released under the MIT License.
+For license of this work, please refer to `LICENSE`.
 
 ## Citation
 If you use the results of this project, please cite the following reference:
