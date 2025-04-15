@@ -96,6 +96,11 @@ If you use the results of this project, please cite the following reference:
   keywords={Training;Accuracy;Event detection;Noise;Supervised learning;Training data;Acoustics;Mathematical models;Timing;Synthetic data;sound event detection;pre-training without real data;environmental sound synthesis},
   doi={10.1109/ICASSP49660.2025.10888414}}
 ```
+
+## Terms of use
+The authors affiliated in National Institute of Advanced Industrial Science and Technology (AIST), Keio University, Waseda University, Doshishya University, and University of Oxford are not responsible for the reproduction, duplication, copy, sale, trade, resell or exploitation for any commercial purposes, of any portion of the images and any portion of derived the data. In no event will we be also liable for any other damages resulting from this data or any derived data.
+
+
 ## Reference
 
 * Jesse Engel et al., "DDSP: Differentiable Digital Signal Processing", in ICLR2020 ([paper](https://arxiv.org/abs/2001.04643))
